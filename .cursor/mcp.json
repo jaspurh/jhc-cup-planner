@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "usable-cup-planner": {
+      "url": "https://usable.dev/api/mcp",
+      "transport": "http",
+      "headers": {
+        "Authorization": "Bearer mmesh_HTdsrx0xypR_pYbfaw8S7pUVdWaHjQ9kXWDivu4x"
+      }
+    }
+  }
+}
