@@ -29,6 +29,6 @@ export type UpdateEventInput = z.infer<typeof updateEventSchema>
 
 // Event ID param
 export const eventIdSchema = z.object({
-  eventId: z.string().cuid(),
+  eventId: z.cuid(),
 })
 

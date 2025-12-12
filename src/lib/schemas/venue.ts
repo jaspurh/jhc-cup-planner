@@ -4,7 +4,7 @@ import { z } from 'zod'
 export const createVenueSchema = z.object({
   name: z.string().min(1, 'Venue name is required').max(100),
   address: z.string().max(200).optional(),
-  eventId: z.string().cuid(),
+  eventId: z.cuid(),
 })
 
 export type CreateVenueInput = z.infer<typeof createVenueSchema>
@@ -20,8 +20,8 @@ export type UpdateVenueInput = z.infer<typeof updateVenueSchema>
 // Create pitch schema
 export const createPitchSchema = z.object({
   name: z.string().min(1, 'Pitch name is required').max(50),
-  tournamentId: z.string().cuid(),
-  venueId: z.string().cuid().optional(),
+  tournamentId: z.cuid(),
+  venueId: z.cuid().optional(),
   capacity: z.number().int().min(0).max(100000).optional(),
 })
 
@@ -30,7 +30,7 @@ export type CreatePitchInput = z.infer<typeof createPitchSchema>
 // Update pitch schema
 export const updatePitchSchema = z.object({
   name: z.string().min(1, 'Pitch name is required').max(50).optional(),
-  venueId: z.string().cuid().nullable().optional(),
+  venueId: z.cuid().nullable().optional(),
   capacity: z.number().int().min(0).max(100000).nullable().optional(),
 })
 

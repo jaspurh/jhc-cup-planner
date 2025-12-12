@@ -9,7 +9,7 @@ export const tournamentFormatSchema = z.enum(['GROUP_STAGE', 'KNOCKOUT', 'DOUBLE
 export const createTournamentSchema = z.object({
   name: z.string().min(1, 'Tournament name is required').max(100, 'Tournament name is too long'),
   description: z.string().max(2000, 'Description is too long').optional(),
-  eventId: z.string().cuid('Invalid event ID'),
+  eventId: z.cuid({ message: 'Invalid event ID' }),
   style: tournamentStyleSchema.default('COMPETITIVE'),
   format: tournamentFormatSchema.default('GROUP_KNOCKOUT'),
   matchDurationMinutes: z.number().int().min(1).max(120).default(5),
@@ -44,6 +44,6 @@ export type TournamentTimingInput = z.infer<typeof tournamentTimingSchema>
 
 // Tournament ID param
 export const tournamentIdSchema = z.object({
-  tournamentId: z.string().cuid(),
+  tournamentId: z.cuid(),
 })
 

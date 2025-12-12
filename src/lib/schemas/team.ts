@@ -10,7 +10,7 @@ export const registrationStatusSchema = z.enum(['PENDING', 'CONFIRMED', 'WITHDRA
 export const createTeamSchema = z.object({
   name: z.string().min(1, 'Team name is required').max(100, 'Team name is too long'),
   contactName: z.string().max(100).optional(),
-  contactEmail: z.string().email('Invalid email address').optional(),
+  contactEmail: z.email({ message: 'Invalid email address' }).optional(),
   contactPhone: z.string().max(20).optional(),
 })
 
@@ -20,7 +20,7 @@ export type CreateTeamInput = z.infer<typeof createTeamSchema>
 export const updateTeamSchema = z.object({
   name: z.string().min(1, 'Team name is required').max(100, 'Team name is too long').optional(),
   contactName: z.string().max(100).nullable().optional(),
-  contactEmail: z.string().email('Invalid email address').nullable().optional(),
+  contactEmail: z.email({ message: 'Invalid email address' }).nullable().optional(),
   contactPhone: z.string().max(20).nullable().optional(),
 })
 
@@ -28,18 +28,18 @@ export type UpdateTeamInput = z.infer<typeof updateTeamSchema>
 
 // Register team to tournament
 export const registerTeamSchema = z.object({
-  teamId: z.string().cuid(),
-  tournamentId: z.string().cuid(),
+  teamId: z.cuid(),
+  tournamentId: z.cuid(),
 })
 
 export type RegisterTeamInput = z.infer<typeof registerTeamSchema>
 
 // Quick registration (create team and register in one step)
 export const quickRegisterTeamSchema = z.object({
-  tournamentId: z.string().cuid(),
+  tournamentId: z.cuid(),
   teamName: z.string().min(1, 'Team name is required').max(100),
   contactName: z.string().min(1, 'Contact name is required').max(100),
-  contactEmail: z.string().email('Invalid email address'),
+  contactEmail: z.email({ message: 'Invalid email address' }),
   contactPhone: z.string().max(20).optional(),
 })
 
@@ -47,7 +47,7 @@ export type QuickRegisterTeamInput = z.infer<typeof quickRegisterTeamSchema>
 
 // Update registration status
 export const updateRegistrationStatusSchema = z.object({
-  registrationId: z.string().cuid(),
+  registrationId: z.cuid(),
   status: registrationStatusSchema,
 })
 
@@ -55,8 +55,8 @@ export type UpdateRegistrationStatusInput = z.infer<typeof updateRegistrationSta
 
 // Add team member
 export const addTeamMemberSchema = z.object({
-  teamId: z.string().cuid(),
-  userId: z.string().cuid(),
+  teamId: z.cuid(),
+  userId: z.cuid(),
   role: teamMemberRoleSchema.default('PLAYER'),
 })
 

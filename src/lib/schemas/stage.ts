@@ -22,7 +22,7 @@ export const knockoutStageConfigSchema = z.object({
 // Create stage schema
 export const createStageSchema = z.object({
   name: z.string().min(1, 'Stage name is required').max(50),
-  tournamentId: z.string().cuid(),
+  tournamentId: z.cuid(),
   type: stageTypeSchema,
   order: z.number().int().min(1),
   gapMinutesBefore: z.number().int().min(0).max(120).default(0),
@@ -44,7 +44,7 @@ export type UpdateStageInput = z.infer<typeof updateStageSchema>
 // Create group schema
 export const createGroupSchema = z.object({
   name: z.string().min(1, 'Group name is required').max(50),
-  stageId: z.string().cuid(),
+  stageId: z.cuid(),
   order: z.number().int().min(1),
   roundRobinType: roundRobinTypeSchema.default('SINGLE'),
 })
@@ -53,8 +53,8 @@ export type CreateGroupInput = z.infer<typeof createGroupSchema>
 
 // Assign team to group
 export const assignTeamToGroupSchema = z.object({
-  groupId: z.string().cuid(),
-  registrationId: z.string().cuid(),
+  groupId: z.cuid(),
+  registrationId: z.cuid(),
   seedPosition: z.number().int().min(1).optional(),
 })
 
