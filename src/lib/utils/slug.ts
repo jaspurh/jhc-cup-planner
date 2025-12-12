@@ -14,7 +14,7 @@ export function generateSlug(text: string): string {
  * Generate a unique slug by appending a random suffix if needed
  */
 export function generateUniqueSlug(text: string, existingSlugs: string[]): string {
-  let slug = generateSlug(text)
+  const slug = generateSlug(text)
   
   if (!existingSlugs.includes(slug)) {
     return slug

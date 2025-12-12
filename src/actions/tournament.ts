@@ -9,7 +9,7 @@ import {
   type CreateTournamentInput, 
   type UpdateTournamentInput 
 } from '@/lib/schemas'
-import { generateSlug, generateUniqueSlug } from '@/lib/utils/slug'
+import { generateUniqueSlug } from '@/lib/utils/slug'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult, TournamentWithDetails } from '@/types'
 import { TournamentStatus } from '@/types'

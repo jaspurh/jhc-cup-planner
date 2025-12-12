@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/lib/db'
-import { registerSchema, type RegisterInput } from '@/lib/schemas/auth'
+import { registerSchema } from '@/lib/schemas/auth'
 import { logger } from '@/lib/logger'
 
 export async function createUser(input: unknown) {
