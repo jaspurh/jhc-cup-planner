@@ -1,8 +1,8 @@
 // Prisma schema for Cup Planner System
-// Auth.js compatible models + application models
+// Auth.js compatible models + application domain models
 
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../src/generated/prisma"
 }
 
@@ -16,17 +16,34 @@ datasource db {
 // ==========================================
 
 model User {
-  id            String    @id @default(cuid())
+  id            String       @id @default(cuid())
   name          String?
-  email         String    @unique
+  email         String       @unique
   emailVerified DateTime?
   image         String?
   passwordHash  String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  platformRole  PlatformRole @default(USER)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
+  // Auth.js relations
   accounts Account[]
   sessions Session[]
+
+  // Application relations
+  ownedEvents       Event[]          @relation("EventOwner")
+  tournamentRoles   TournamentRole[]
+  createdTeams      Team[]           @relation("TeamCreator")
+  teamMemberships   TeamMember[]
+  sentInvitations   Invitation[]     @relation("InvitationSender")
+  auditLogs         AuditLog[]
+}
+
+// Platform-wide roles (technical roles from PRD)
+enum PlatformRole {
+  USER    // Regular user (default)
+  SUPPORT // Support Specialist - limited troubleshooting access
+  ADMIN   // Administrator - full platform access
 }
 
 model Account {
@@ -63,4 +80,471 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// ==========================================
+// Event & Tournament Models
+// ==========================================
+
+model Event {
+  id          String      @id @default(cuid())
+  name        String
+  description String?     @db.Text
+  slug        String      @unique
+  startDate   DateTime
+  endDate     DateTime
+  status      EventStatus @default(DRAFT)
+  ownerId     String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  owner       User         @relation("EventOwner", fields: [ownerId], references: [id])
+  tournaments Tournament[]
+  venues      Venue[]
+
+  @@index([ownerId])
+  @@index([slug])
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model Tournament {
+  id                    String           @id @default(cuid())
+  name                  String
+  description           String?          @db.Text
+  slug                  String
+  eventId               String
+  status                TournamentStatus @default(DRAFT)
+  style                 TournamentStyle  @default(COMPETITIVE)
+  format                TournamentFormat @default(GROUP_KNOCKOUT)
+  
+  // Timing configuration
+  matchDurationMinutes        Int @default(5)
+  transitionTimeMinutes       Int @default(1)
+  
+  // Scheduling
+  startTime             DateTime?
+  endTime               DateTime?
+  
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  event                 Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  stages                Stage[]
+  teams                 TeamRegistration[]
+  pitches               Pitch[]
+  roles                 TournamentRole[]
+  invitations           Invitation[]
+
+  @@unique([eventId, slug])
+  @@index([eventId])
+  @@index([status])
+}
+
+enum TournamentStatus {
+  DRAFT
+  READY
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum TournamentStyle {
+  COMPETITIVE
+  RECREATIONAL
+}
+
+enum TournamentFormat {
+  GROUP_STAGE
+  KNOCKOUT
+  DOUBLE_ELIMINATION
+  GROUP_KNOCKOUT
+  ROUND_ROBIN
+}
+
+// ==========================================
+// Stage & Group Models
+// ==========================================
+
+model Stage {
+  id                 String    @id @default(cuid())
+  name               String
+  tournamentId       String
+  type               StageType
+  order              Int
+  gapMinutesBefore   Int       @default(0)
+  
+  // Stage configuration (JSON for flexibility)
+  configuration      Json?
+  
+  // Calculated timing
+  startTime          DateTime?
+  endTime            DateTime?
+  
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tournament         Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  groups             Group[]
+  matches            Match[]
+
+  @@unique([tournamentId, order])
+  @@index([tournamentId])
+}
+
+enum StageType {
+  GROUP_STAGE
+  KNOCKOUT
+  FINAL
+}
+
+model Group {
+  id           String   @id @default(cuid())
+  name         String
+  stageId      String
+  order        Int
+  
+  // Round-robin configuration
+  roundRobinType RoundRobinType @default(SINGLE)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  stage        Stage              @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  teamAssignments GroupTeamAssignment[]
+  matches      Match[]
+  standings    GroupStanding[]
+
+  @@unique([stageId, order])
+  @@index([stageId])
+}
+
+enum RoundRobinType {
+  SINGLE
+  DOUBLE
+}
+
+model GroupTeamAssignment {
+  id              String   @id @default(cuid())
+  groupId         String
+  registrationId  String
+  seedPosition    Int?
+  
+  createdAt       DateTime @default(now())
+
+  group           Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  registration    TeamRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, registrationId])
+  @@index([groupId])
+  @@index([registrationId])
+}
+
+model GroupStanding {
+  id             String   @id @default(cuid())
+  groupId        String
+  registrationId String
+  position       Int
+  played         Int      @default(0)
+  won            Int      @default(0)
+  drawn          Int      @default(0)
+  lost           Int      @default(0)
+  goalsFor       Int      @default(0)
+  goalsAgainst   Int      @default(0)
+  goalDifference Int      @default(0)
+  points         Int      @default(0)
+  
+  updatedAt      DateTime @updatedAt
+
+  group          Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  registration   TeamRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, registrationId])
+  @@index([groupId])
+}
+
+// ==========================================
+// Team Models
+// ==========================================
+
+model Team {
+  id            String   @id @default(cuid())
+  name          String
+  contactName   String?
+  contactEmail  String?
+  contactPhone  String?
+  createdById   String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  createdBy     User?             @relation("TeamCreator", fields: [createdById], references: [id])
+  members       TeamMember[]
+  registrations TeamRegistration[]
+
+  @@index([createdById])
+}
+
+model TeamMember {
+  id        String         @id @default(cuid())
+  teamId    String
+  userId    String
+  role      TeamMemberRole @default(PLAYER)
+  
+  createdAt DateTime       @default(now())
+
+  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
+}
+
+enum TeamMemberRole {
+  CAPTAIN
+  COACH
+  PLAYER
+}
+
+model TeamRegistration {
+  id               String             @id @default(cuid())
+  teamId           String
+  tournamentId     String
+  status           RegistrationStatus @default(PENDING)
+  registeredAt     DateTime           @default(now())
+  confirmedAt      DateTime?
+  
+  // Optional: store team name at time of registration (for historical accuracy)
+  registeredTeamName String?
+
+  team             Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  tournament       Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  groupAssignments GroupTeamAssignment[]
+  standings        GroupStanding[]
+  homeMatches      Match[]            @relation("HomeTeam")
+  awayMatches      Match[]            @relation("AwayTeam")
+
+  @@unique([teamId, tournamentId])
+  @@index([tournamentId])
+  @@index([status])
+}
+
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  WITHDRAWN
+  REJECTED
+}
+
+// ==========================================
+// Match Models
+// ==========================================
+
+model Match {
+  id                String      @id @default(cuid())
+  stageId           String
+  groupId           String?
+  pitchId           String?
+  
+  // Teams (nullable for knockout matches before advancement)
+  homeRegistrationId String?
+  awayRegistrationId String?
+  
+  // Match metadata
+  matchNumber       Int?
+  roundNumber       Int?
+  bracketPosition   String?     // e.g., "QF1", "SF2", "F"
+  
+  // Timing
+  scheduledStartTime DateTime?
+  scheduledEndTime   DateTime?
+  actualStartTime    DateTime?
+  actualEndTime      DateTime?
+  
+  status            MatchStatus @default(SCHEDULED)
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  stage             Stage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  group             Group?           @relation(fields: [groupId], references: [id])
+  pitch             Pitch?           @relation(fields: [pitchId], references: [id])
+  homeTeam          TeamRegistration? @relation("HomeTeam", fields: [homeRegistrationId], references: [id])
+  awayTeam          TeamRegistration? @relation("AwayTeam", fields: [awayRegistrationId], references: [id])
+  result            MatchResult?
+
+  @@index([stageId])
+  @@index([groupId])
+  @@index([scheduledStartTime])
+  @@index([status])
+}
+
+enum MatchStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  POSTPONED
+}
+
+model MatchResult {
+  id            String   @id @default(cuid())
+  matchId       String   @unique
+  homeScore     Int
+  awayScore     Int
+  
+  // Optional: penalty shootout
+  homePenalties Int?
+  awayPenalties Int?
+  
+  // Metadata
+  enteredById   String?
+  enteredAt     DateTime @default(now())
+  
+  // Notes
+  notes         String?  @db.Text
+
+  match         Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// Venue & Pitch Models
+// ==========================================
+
+model Venue {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  eventId   String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  pitches   Pitch[]
+
+  @@index([eventId])
+}
+
+model Pitch {
+  id           String   @id @default(cuid())
+  name         String
+  venueId      String?
+  tournamentId String
+  capacity     Int?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  venue        Venue?     @relation(fields: [venueId], references: [id])
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matches      Match[]
+
+  @@index([tournamentId])
+  @@index([venueId])
+}
+
+// ==========================================
+// Invitation Model
+// ==========================================
+
+model Invitation {
+  id             String           @id @default(cuid())
+  tournamentId   String
+  token          String           @unique @default(cuid())
+  
+  // Invitee info
+  teamName       String?
+  contactEmail   String
+  contactName    String?
+  
+  // Status
+  status         InvitationStatus @default(PENDING)
+  expiresAt      DateTime
+  
+  // Tracking
+  sentById       String
+  sentAt         DateTime         @default(now())
+  openedAt       DateTime?
+  respondedAt    DateTime?
+  
+  // Custom message from organizer
+  message        String?          @db.Text
+
+  tournament     Tournament       @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  sentBy         User             @relation("InvitationSender", fields: [sentById], references: [id])
+
+  @@index([tournamentId])
+  @@index([token])
+  @@index([contactEmail])
+  @@index([status])
+}
+
+enum InvitationStatus {
+  PENDING
+  SENT
+  OPENED
+  REGISTERED
+  EXPIRED
+  CANCELLED
+}
+
+// ==========================================
+// Role-Based Access Control
+// ==========================================
+
+model TournamentRole {
+  id           String              @id @default(cuid())
+  userId       String
+  tournamentId String
+  role         TournamentRoleType
+  
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tournament   Tournament          @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tournamentId])
+  @@index([userId])
+  @@index([tournamentId])
+}
+
+enum TournamentRoleType {
+  ORGANIZER
+  CONTACT_PERSON
+  VIEWER
+}
+
+// Platform-wide roles are handled via a separate field or system
+// For now, we can add a platformRole to User if needed
+
+// ==========================================
+// Audit Log
+// ==========================================
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String?
+  action       String
+  entityType   String
+  entityId     String
+  details      Json?
+  ipAddress    String?
+  userAgent    String?
+  
+  createdAt    DateTime @default(now())
+
+  user         User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }
