@@ -3,6 +3,23 @@ import { z } from 'zod'
 // Event status enum
 export const eventStatusSchema = z.enum(['DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'ARCHIVED'])
 
+// Hex color validation
+export const hexColorSchema = z
+  .string()
+  .regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Invalid hex color')
+  .optional()
+  .nullable()
+
+// Branding schema (used in events)
+export const brandingSchema = z.object({
+  logoUrl: z.string().url('Invalid logo URL').optional().nullable(),
+  primaryColor: hexColorSchema,
+  secondaryColor: hexColorSchema,
+  accentColor: hexColorSchema,
+})
+
+export type BrandingInput = z.infer<typeof brandingSchema>
+
 // Create event schema
 export const createEventSchema = z.object({
   name: z.string().min(1, 'Event name is required').max(100, 'Event name is too long'),
@@ -16,13 +33,18 @@ export const createEventSchema = z.object({
 
 export type CreateEventInput = z.infer<typeof createEventSchema>
 
-// Update event schema
+// Update event schema (includes branding)
 export const updateEventSchema = z.object({
   name: z.string().min(1, 'Event name is required').max(100, 'Event name is too long').optional(),
   description: z.string().max(2000, 'Description is too long').nullable().optional(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
   status: eventStatusSchema.optional(),
+  // Branding fields
+  logoUrl: z.string().url('Invalid logo URL').optional().nullable(),
+  primaryColor: hexColorSchema,
+  secondaryColor: hexColorSchema,
+  accentColor: hexColorSchema,
 })
 
 export type UpdateEventInput = z.infer<typeof updateEventSchema>

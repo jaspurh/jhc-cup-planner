@@ -86,6 +86,12 @@ export interface EventWithTournaments {
   ownerId: string
   createdAt: Date
   updatedAt: Date
+  // Branding
+  logoUrl: string | null
+  primaryColor: string | null
+  secondaryColor: string | null
+  accentColor: string | null
+  // Relations
   tournaments: TournamentSummary[]
 }
 

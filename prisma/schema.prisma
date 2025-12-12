@@ -98,6 +98,12 @@ model Event {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
+  // Branding for public pages
+  logoUrl        String?
+  primaryColor   String?  // Hex color code, e.g. "#0066cc"
+  secondaryColor String?  // Hex color code
+  accentColor    String?  // Hex color code
+
   owner       User         @relation("EventOwner", fields: [ownerId], references: [id])
   tournaments Tournament[]
   venues      Venue[]
