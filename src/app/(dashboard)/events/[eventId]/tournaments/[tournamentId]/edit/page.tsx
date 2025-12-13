@@ -36,7 +36,7 @@ export default async function EditTournamentPage({ params }: EditTournamentPageP
           <span className="mx-2">/</span>
           <span className="text-gray-900">Edit</span>
         </nav>
-        <h1 className="text-2xl font-bold">Edit Tournament</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Edit Tournament</h1>
         <p className="text-gray-500">Update tournament settings</p>
       </div>
 

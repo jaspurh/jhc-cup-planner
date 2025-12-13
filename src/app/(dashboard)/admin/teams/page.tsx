@@ -40,7 +40,7 @@ export default async function AdminTeamsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Teams</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Teams</h1>
         <p className="text-gray-500">All registered teams across tournaments</p>
       </div>
 

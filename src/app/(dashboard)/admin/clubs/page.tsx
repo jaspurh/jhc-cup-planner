@@ -32,7 +32,7 @@ export default async function AdminClubsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Club Registry</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Club Registry</h1>
           <p className="text-gray-500">Manage sports clubs and their administrators</p>
         </div>
         <Link href="/admin/clubs/new">

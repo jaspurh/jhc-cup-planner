@@ -96,7 +96,7 @@ export function TournamentEditForm({ tournament, eventId }: TournamentEditFormPr
               <textarea
                 name="description"
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder:text-gray-400"
                 placeholder="Brief description of the tournament..."
                 defaultValue={tournament.description || ''}
               />
@@ -109,7 +109,7 @@ export function TournamentEditForm({ tournament, eventId }: TournamentEditFormPr
                 </label>
                 <select
                   name="style"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                   defaultValue={tournament.style}
                 >
                   {TOURNAMENT_STYLE_OPTIONS.map((option) => (
@@ -126,7 +126,7 @@ export function TournamentEditForm({ tournament, eventId }: TournamentEditFormPr
                 </label>
                 <select
                   name="format"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                   defaultValue={tournament.format}
                 >
                   {TOURNAMENT_FORMAT_OPTIONS.map((option) => (

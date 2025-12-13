@@ -134,7 +134,7 @@ export function RegistrationForm({
                   <select
                     id="primaryClubId"
                     name="primaryClubId"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                   >
                     <option value="">No club / Independent</option>
                     {clubs.map((club) => (
@@ -155,7 +155,7 @@ export function RegistrationForm({
                   <select
                     id="secondaryClubId"
                     name="secondaryClubId"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                   >
                     <option value="">None</option>
                     {clubs.map((club) => (
