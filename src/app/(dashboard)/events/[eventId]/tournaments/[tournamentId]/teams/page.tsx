@@ -5,7 +5,7 @@ import { getTournamentRegistrations } from '@/actions/team'
 import { getTournamentInvitations } from '@/actions/invitation'
 import { Button } from '@/components/ui/button'
 import { TeamList } from '@/components/teams/team-list'
-import { InvitationForm } from '@/components/invitations/invitation-form'
+import { AddTeamForm } from '@/components/teams/add-team-form'
 import { InvitationList } from '@/components/invitations/invitation-list'
 import { CSVImport } from '@/components/invitations/csv-import'
 
@@ -63,9 +63,9 @@ export default async function TeamsPage({ params }: TeamsPageProps) {
           />
         </div>
 
-        {/* Right column: Invitations */}
+        {/* Right column: Add Teams & Invitations */}
         <div className="space-y-6">
-          <InvitationForm 
+          <AddTeamForm 
             tournamentId={tournamentId}
             tournamentName={tournament.name}
           />

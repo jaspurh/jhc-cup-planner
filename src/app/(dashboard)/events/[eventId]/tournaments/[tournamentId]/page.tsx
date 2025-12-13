@@ -130,7 +130,9 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>Stages</CardTitle>
-              <Button variant="secondary" size="sm">Configure</Button>
+              <Link href={`/events/${eventId}/tournaments/${tournamentId}/configure`}>
+                <Button variant="secondary" size="sm">Configure</Button>
+              </Link>
             </div>
           </CardHeader>
           <CardContent>
