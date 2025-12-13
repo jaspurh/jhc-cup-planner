@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getInvitationByToken } from '@/actions/invitation'
+import { getClubs } from '@/actions/club'
 import { RegistrationForm } from '@/components/teams/registration-form'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -79,6 +80,10 @@ export default async function RegisterPage({ params }: RegisterPageProps) {
     )
   }
 
+  // Fetch available clubs for the registration form
+  const clubsResult = await getClubs()
+  const clubs = clubsResult.success ? clubsResult.data : []
+
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-lg mx-auto mb-8 text-center">
@@ -96,6 +101,7 @@ export default async function RegisterPage({ params }: RegisterPageProps) {
           contactName: invitation.contactName || undefined,
           contactEmail: invitation.contactEmail,
         }}
+        clubs={clubs}
       />
     </div>
   )

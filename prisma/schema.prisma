@@ -31,12 +31,13 @@ model User {
   sessions Session[]
 
   // Application relations
-  ownedEvents       Event[]          @relation("EventOwner")
-  tournamentRoles   TournamentRole[]
-  createdTeams      Team[]           @relation("TeamCreator")
-  teamMemberships   TeamMember[]
-  sentInvitations   Invitation[]     @relation("InvitationSender")
-  auditLogs         AuditLog[]
+  ownedEvents         Event[]          @relation("EventOwner")
+  tournamentRoles     TournamentRole[]
+  createdTeams        Team[]           @relation("TeamCreator")
+  teamMemberships     TeamMember[]
+  sentInvitations     Invitation[]     @relation("InvitationSender")
+  clubAdministrations ClubAdmin[]
+  auditLogs           AuditLog[]
 }
 
 // Platform-wide roles (technical roles from PRD)
@@ -130,6 +131,9 @@ model Tournament {
   style                 TournamentStyle  @default(COMPETITIVE)
   format                TournamentFormat @default(GROUP_KNOCKOUT)
   
+  // Registration control
+  registrationMode      RegistrationMode @default(OPEN)
+  
   // Timing configuration
   matchDurationMinutes        Int @default(5)
   transitionTimeMinutes       Int @default(1)
@@ -151,6 +155,13 @@ model Tournament {
   @@unique([eventId, slug])
   @@index([eventId])
   @@index([status])
+}
+
+enum RegistrationMode {
+  OPEN            // Anyone with registration link
+  INVITE_ONLY     // Only invited teams
+  CLUB_ADMIN      // Only club admins can register for their club
+  CLUB_MEMBERS    // Users affiliated with registered clubs
 }
 
 enum TournamentStatus {
@@ -276,25 +287,79 @@ model GroupStanding {
 }
 
 // ==========================================
+// Club Models
+// ==========================================
+
+model Club {
+  id              String     @id @default(cuid())
+  name            String     // Short name: "HB", "B68", "B36"
+  fullName        String?    // Full name: "Havnar Bóltfelag"
+  country         String?
+  region          String?
+  logoUrl         String?
+  primaryColor    String?    // Hex color code
+  secondaryColor  String?    // Hex color code
+  status          ClubStatus @default(ACTIVE)
+  
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  administrators  ClubAdmin[]
+  primaryTeams    Team[]     @relation("PrimaryClub")
+  secondaryTeams  Team[]     @relation("SecondaryClub")
+
+  @@index([name])
+  @@index([status])
+}
+
+enum ClubStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model ClubAdmin {
+  id        String   @id @default(cuid())
+  clubId    String
+  userId    String
+  
+  createdAt DateTime @default(now())
+
+  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, userId])
+  @@index([clubId])
+  @@index([userId])
+}
+
+// ==========================================
 // Team Models
 // ==========================================
 
 model Team {
-  id            String   @id @default(cuid())
-  name          String
-  contactName   String?
-  contactEmail  String?
-  contactPhone  String?
-  createdById   String?
+  id              String   @id @default(cuid())
+  name            String
+  contactName     String?
+  contactEmail    String?
+  contactPhone    String?
+  createdById     String?
   
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  // Club affiliation
+  primaryClubId   String?
+  secondaryClubId String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  createdBy     User?             @relation("TeamCreator", fields: [createdById], references: [id])
-  members       TeamMember[]
-  registrations TeamRegistration[]
+  createdBy       User?             @relation("TeamCreator", fields: [createdById], references: [id])
+  primaryClub     Club?             @relation("PrimaryClub", fields: [primaryClubId], references: [id])
+  secondaryClub   Club?             @relation("SecondaryClub", fields: [secondaryClubId], references: [id])
+  members         TeamMember[]
+  registrations   TeamRegistration[]
 
   @@index([createdById])
+  @@index([primaryClubId])
+  @@index([secondaryClubId])
 }
 
 model TeamMember {

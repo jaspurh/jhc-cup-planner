@@ -160,6 +160,8 @@ export async function quickRegisterTeam(input: {
   contactEmail: string
   contactPhone?: string
   invitationToken?: string
+  primaryClubId?: string | null
+  secondaryClubId?: string | null
 }): Promise<ActionResult<{ teamId: string; registrationId: string }>> {
   try {
     const validated = quickRegisterTeamSchema.parse(input)
@@ -225,13 +227,15 @@ export async function quickRegisterTeam(input: {
 
     // Create team and registration in transaction
     const result = await db.$transaction(async (tx) => {
-      // Create team
+      // Create team with club affiliation
       const team = await tx.team.create({
         data: {
           name: validated.teamName,
           contactName: validated.contactName,
           contactEmail: validated.contactEmail,
           contactPhone: validated.contactPhone,
+          primaryClubId: validated.primaryClubId ?? null,
+          secondaryClubId: validated.secondaryClubId ?? null,
         }
       })
 
@@ -348,6 +352,8 @@ export async function getTournamentRegistrations(tournamentId: string): Promise<
     status: RegistrationStatus
     registeredAt: Date
     confirmedAt: Date | null
+    primaryClub: { id: string; name: string; primaryColor: string | null } | null
+    secondaryClub: { id: string; name: string; primaryColor: string | null } | null
   }>
 }>> {
   try {
@@ -378,6 +384,20 @@ export async function getTournamentRegistrations(tournamentId: string): Promise<
             name: true,
             contactName: true,
             contactEmail: true,
+            primaryClub: {
+              select: {
+                id: true,
+                name: true,
+                primaryColor: true,
+              }
+            },
+            secondaryClub: {
+              select: {
+                id: true,
+                name: true,
+                primaryColor: true,
+              }
+            },
           }
         }
       },
@@ -396,6 +416,8 @@ export async function getTournamentRegistrations(tournamentId: string): Promise<
           status: r.status,
           registeredAt: r.registeredAt,
           confirmedAt: r.confirmedAt,
+          primaryClub: r.team.primaryClub,
+          secondaryClub: r.team.secondaryClub,
         }))
       }
     }

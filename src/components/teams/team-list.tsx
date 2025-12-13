@@ -8,6 +8,12 @@ import { updateRegistrationStatus } from '@/actions/team'
 import { formatDate } from '@/lib/utils/date'
 import type { RegistrationStatus } from '@/types'
 
+interface ClubInfo {
+  id: string
+  name: string
+  primaryColor: string | null
+}
+
 interface TeamRegistration {
   id: string
   teamId: string
@@ -17,6 +23,8 @@ interface TeamRegistration {
   status: RegistrationStatus
   registeredAt: Date
   confirmedAt: Date | null
+  primaryClub?: ClubInfo | null
+  secondaryClub?: ClubInfo | null
 }
 
 interface TeamListProps {
@@ -66,9 +74,30 @@ export function TeamList({ registrations, canManage = true }: TeamListProps) {
             <div key={reg.id} className="py-4 first:pt-0 last:pb-0">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-gray-900">{reg.teamName}</span>
                     <StatusBadge status={reg.status} />
+                    {reg.primaryClub && (
+                      <span 
+                        className="text-xs px-2 py-0.5 rounded-full text-white"
+                        style={{ backgroundColor: reg.primaryClub.primaryColor || '#6b7280' }}
+                        title={`Primary club: ${reg.primaryClub.name}`}
+                      >
+                        {reg.primaryClub.name}
+                      </span>
+                    )}
+                    {reg.secondaryClub && (
+                      <span 
+                        className="text-xs px-2 py-0.5 rounded-full border"
+                        style={{ 
+                          borderColor: reg.secondaryClub.primaryColor || '#6b7280',
+                          color: reg.secondaryClub.primaryColor || '#6b7280'
+                        }}
+                        title={`Secondary club: ${reg.secondaryClub.name}`}
+                      >
+                        +{reg.secondaryClub.name}
+                      </span>
+                    )}
                   </div>
                   {(reg.contactName || reg.contactEmail) && (
                     <p className="text-sm text-gray-500 mt-1">

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { quickRegisterTeam } from '@/actions/team'
+import type { ClubSummary } from '@/types'
 
 interface RegistrationFormProps {
   tournamentId: string
@@ -17,6 +18,7 @@ interface RegistrationFormProps {
     contactName?: string
     contactEmail?: string
   }
+  clubs?: ClubSummary[]
 }
 
 export function RegistrationForm({ 
@@ -24,7 +26,8 @@ export function RegistrationForm({
   tournamentName, 
   eventName,
   invitationToken,
-  prefillData 
+  prefillData,
+  clubs = [],
 }: RegistrationFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -37,6 +40,9 @@ export function RegistrationForm({
 
     const formData = new FormData(e.currentTarget)
     
+    const primaryClubId = formData.get('primaryClubId') as string
+    const secondaryClubId = formData.get('secondaryClubId') as string
+
     const result = await quickRegisterTeam({
       tournamentId,
       teamName: formData.get('teamName') as string,
@@ -44,6 +50,8 @@ export function RegistrationForm({
       contactEmail: formData.get('contactEmail') as string,
       contactPhone: formData.get('contactPhone') as string || undefined,
       invitationToken,
+      primaryClubId: primaryClubId || null,
+      secondaryClubId: secondaryClubId || null,
     })
 
     setLoading(false)
@@ -60,6 +68,8 @@ export function RegistrationForm({
       setError(result.error || 'Failed to register')
     }
   }
+
+  const hasClubs = clubs.length > 0
 
   return (
     <Card className="max-w-lg mx-auto">
@@ -108,6 +118,59 @@ export function RegistrationForm({
             label="Phone Number (optional)"
             placeholder="+45 12 34 56 78"
           />
+
+          {/* Club Affiliation Section */}
+          {hasClubs && (
+            <div className="border-t pt-4 mt-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">
+                Club Affiliation (optional)
+              </h3>
+              
+              <div className="space-y-3">
+                <div>
+                  <label htmlFor="primaryClubId" className="block text-sm font-medium text-gray-700 mb-1">
+                    Primary Club
+                  </label>
+                  <select
+                    id="primaryClubId"
+                    name="primaryClubId"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">No club / Independent</option>
+                    {clubs.map((club) => (
+                      <option key={club.id} value={club.id}>
+                        {club.name}{club.fullName ? ` - ${club.fullName}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    The club your team is mainly affiliated with
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="secondaryClubId" className="block text-sm font-medium text-gray-700 mb-1">
+                    Secondary Club (optional)
+                  </label>
+                  <select
+                    id="secondaryClubId"
+                    name="secondaryClubId"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">None</option>
+                    {clubs.map((club) => (
+                      <option key={club.id} value={club.id}>
+                        {club.name}{club.fullName ? ` - ${club.fullName}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    If some players are from another club
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <Button type="submit" className="w-full" loading={loading}>
             Register Team

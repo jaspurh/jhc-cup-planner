@@ -46,7 +46,9 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
           )}
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary">Edit</Button>
+          <Link href={`/events/${eventId}/tournaments/${tournamentId}/edit`}>
+            <Button variant="secondary">Edit</Button>
+          </Link>
         </div>
       </div>
 

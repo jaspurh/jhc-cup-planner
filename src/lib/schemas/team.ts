@@ -42,7 +42,19 @@ export const quickRegisterTeamSchema = z.object({
   contactEmail: z.email({ message: 'Invalid email address' }),
   contactPhone: z.string().max(20).optional(),
   invitationToken: z.string().optional(),
-})
+  // Club affiliation
+  primaryClubId: z.cuid().optional().nullable(),
+  secondaryClubId: z.cuid().optional().nullable(),
+}).refine(
+  (data) => {
+    // If both are set, they must be different
+    if (data.primaryClubId && data.secondaryClubId) {
+      return data.primaryClubId !== data.secondaryClubId
+    }
+    return true
+  },
+  { message: 'Primary and secondary clubs must be different' }
+)
 
 export type QuickRegisterTeamInput = z.infer<typeof quickRegisterTeamSchema>
 

@@ -18,6 +18,8 @@ import {
   InvitationStatus,
   TournamentRoleType,
   PlatformRole,
+  ClubStatus,
+  RegistrationMode,
 } from '@/generated/prisma'
 
 declare module 'next-auth' {
@@ -52,6 +54,8 @@ export type {
   Invitation,
   TournamentRole,
   AuditLog,
+  Club,
+  ClubAdmin,
 } from '@/generated/prisma'
 
 // Re-export enums
@@ -68,6 +72,8 @@ export {
   InvitationStatus,
   TournamentRoleType,
   PlatformRole,
+  ClubStatus,
+  RegistrationMode,
 }
 
 // ==========================================
@@ -240,6 +246,58 @@ export interface StandingRow {
 }
 
 // ==========================================
+// Club Types
+// ==========================================
+
+// Club with administrator info
+export interface ClubWithAdmins {
+  id: string
+  name: string
+  fullName: string | null
+  country: string | null
+  region: string | null
+  logoUrl: string | null
+  primaryColor: string | null
+  secondaryColor: string | null
+  status: ClubStatus
+  createdAt: Date
+  updatedAt: Date
+  administrators: {
+    id: string
+    userId: string
+    user: {
+      id: string
+      name: string | null
+      email: string
+    }
+  }[]
+  _count?: {
+    primaryTeams: number
+    secondaryTeams: number
+  }
+}
+
+// Club summary for selectors/lists
+export interface ClubSummary {
+  id: string
+  name: string
+  fullName: string | null
+  logoUrl: string | null
+  primaryColor: string | null
+}
+
+// Team with club affiliation
+export interface TeamWithClub {
+  id: string
+  name: string
+  contactName: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+  primaryClub: ClubSummary | null
+  secondaryClub: ClubSummary | null
+}
+
+// ==========================================
 // Action Result Types
 // ==========================================
 
@@ -277,6 +335,7 @@ export type Permission =
   | 'team:manage'
   | 'invitation:send'
   | 'invitation:manage'
+  | 'club:register_team'
 
 // Tournament-level role permissions
 export const TOURNAMENT_ROLE_PERMISSIONS: Record<TournamentRoleType, Permission[]> = {
@@ -309,6 +368,8 @@ export type PlatformPermission =
   | 'users:manage'
   | 'events:read_all'
   | 'events:manage_all'
+  | 'clubs:read'
+  | 'clubs:manage'
   | 'system:config'
 
 export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[]> = {
@@ -317,6 +378,7 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     'platform:support',
     'users:read',
     'events:read_all',
+    'clubs:read',
   ],
   ADMIN: [
     'platform:admin',
@@ -325,6 +387,8 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, PlatformPermission[
     'users:manage',
     'events:read_all',
     'events:manage_all',
+    'clubs:read',
+    'clubs:manage',
     'system:config',
   ],
 }
