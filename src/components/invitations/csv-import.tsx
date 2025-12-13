@@ -13,12 +13,18 @@ interface CSVImportProps {
 }
 
 interface ParsedRow {
+  lineNumber: number
   contactEmail?: string
   contactName?: string
   teamName?: string
+  errors: string[]
+  isValid: boolean
 }
 
 type ImportMode = 'invite' | 'direct'
+
+// Email validation regex
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function CSVImport({ tournamentId }: CSVImportProps) {
   const router = useRouter()
@@ -37,41 +43,66 @@ export function CSVImport({ tournamentId }: CSVImportProps) {
     const firstLine = lines[0].toLowerCase()
     const hasHeader = firstLine.includes('email') || firstLine.includes('name') || firstLine.includes('team')
     const dataLines = hasHeader ? lines.slice(1) : lines
+    const startLine = hasHeader ? 2 : 1 // For error reporting (1-indexed)
 
     const rows: ParsedRow[] = []
     
-    for (const line of dataLines) {
-      if (!line.trim()) continue
-      const parts = line.split(',').map(p => p.trim().replace(/^["']|["']$/g, ''))
+    for (let i = 0; i < dataLines.length; i++) {
+      const line = dataLines[i]
+      const lineNumber = startLine + i
       
-      // Try to detect column order
-      const emailIndex = parts.findIndex(p => p.includes('@'))
+      if (!line.trim()) continue
+      
+      const parts = line.split(',').map(p => p.trim().replace(/^["']|["']$/g, ''))
+      const rowErrors: string[] = []
       
       if (mode === 'invite') {
-        // For invitations, email is required
-        if (emailIndex === -1) continue
-        const email = parts[emailIndex]
-        if (!email.includes('@')) continue
+        // For invitations, email is required and must be valid
+        const emailIndex = parts.findIndex(p => p.includes('@'))
+        const email = emailIndex !== -1 ? parts[emailIndex] : parts[0]
         
-        const otherParts = parts.filter((_, i) => i !== emailIndex)
+        if (!email || !email.trim()) {
+          rowErrors.push('Email is required')
+        } else if (!EMAIL_REGEX.test(email)) {
+          rowErrors.push(`Invalid email format: "${email}"`)
+        }
+        
+        const otherParts = emailIndex !== -1 
+          ? parts.filter((_, idx) => idx !== emailIndex)
+          : parts.slice(1)
+
         rows.push({
+          lineNumber,
           contactEmail: email,
           contactName: otherParts[0] || undefined,
           teamName: otherParts[1] || undefined,
+          errors: rowErrors,
+          isValid: rowErrors.length === 0,
         })
       } else {
         // For direct add, team name is required
-        // Format: team name, contact name, email (optional), phone (optional)
-        if (parts.length === 0 || !parts[0].trim()) continue
-        
+        // Format: team name, contact name, email (optional)
         const teamName = parts[0]
         const contactName = parts[1] || undefined
+        const emailIndex = parts.findIndex(p => p.includes('@'))
         const email = emailIndex !== -1 ? parts[emailIndex] : undefined
         
+        if (!teamName || !teamName.trim()) {
+          rowErrors.push('Team name is required')
+        }
+        
+        // Validate email if provided
+        if (email && !EMAIL_REGEX.test(email)) {
+          rowErrors.push(`Invalid email format: "${email}"`)
+        }
+        
         rows.push({
-          teamName,
+          lineNumber,
+          teamName: teamName || undefined,
           contactName,
           contactEmail: email,
+          errors: rowErrors,
+          isValid: rowErrors.length === 0,
         })
       }
     }
@@ -98,11 +129,7 @@ export function CSVImport({ tournamentId }: CSVImportProps) {
       const parsed = parseCSV(content)
       
       if (parsed.length === 0) {
-        if (mode === 'invite') {
-          setError('No valid email addresses found in CSV')
-        } else {
-          setError('No valid team names found in CSV')
-        }
+        setError('No data rows found in CSV file')
         return
       }
 
@@ -112,14 +139,12 @@ export function CSVImport({ tournamentId }: CSVImportProps) {
   }
 
   async function handleImport() {
-    if (preview.length === 0) return
+    const validRows = preview.filter(r => r.isValid)
+    if (validRows.length === 0) return
 
     setError(null)
 
     if (mode === 'invite') {
-      // Filter to only rows with email
-      const validRows = preview.filter(r => r.contactEmail)
-      
       const importResult = await createBulkInvitations({
         tournamentId,
         invitations: validRows.map(r => ({
@@ -140,9 +165,6 @@ export function CSVImport({ tournamentId }: CSVImportProps) {
         setError(importResult.error || 'Failed to import invitations')
       }
     } else {
-      // Filter to only rows with team name
-      const validRows = preview.filter(r => r.teamName)
-      
       const importResult = await addTeamsBulk({
         tournamentId,
         teams: validRows.map(r => ({
@@ -183,6 +205,9 @@ export function CSVImport({ tournamentId }: CSVImportProps) {
       fileInputRef.current.value = ''
     }
   }
+
+  const validRows = preview.filter(r => r.isValid)
+  const invalidRows = preview.filter(r => !r.isValid)
 
   return (
     <Card>
@@ -264,12 +289,38 @@ export function CSVImport({ tournamentId }: CSVImportProps) {
             </p>
           </div>
 
-          {preview.length > 0 && (
+          {/* Validation Errors Summary */}
+          {invalidRows.length > 0 && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="font-medium text-amber-800 mb-2">
+                ⚠️ {invalidRows.length} row{invalidRows.length > 1 ? 's' : ''} with errors (will be skipped):
+              </p>
+              <ul className="text-sm text-amber-700 space-y-1 max-h-32 overflow-y-auto">
+                {invalidRows.slice(0, 10).map((row) => (
+                  <li key={row.lineNumber}>
+                    <span className="font-mono">Line {row.lineNumber}:</span>{' '}
+                    {row.errors.join(', ')}
+                  </li>
+                ))}
+                {invalidRows.length > 10 && (
+                  <li className="text-amber-500">... and {invalidRows.length - 10} more errors</li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {/* Valid Rows Preview */}
+          {validRows.length > 0 && (
             <div className="border rounded-lg overflow-hidden">
-              <div className="bg-gray-50 px-4 py-2 border-b">
+              <div className="bg-gray-50 px-4 py-2 border-b flex justify-between items-center">
                 <span className="text-sm font-medium">
-                  Preview ({preview.length} {mode === 'invite' ? 'invitations' : 'teams'})
+                  ✓ {validRows.length} valid {mode === 'invite' ? 'invitations' : 'teams'}
                 </span>
+                {invalidRows.length > 0 && (
+                  <span className="text-xs text-amber-600">
+                    ({invalidRows.length} will be skipped)
+                  </span>
+                )}
               </div>
               <div className="max-h-60 overflow-y-auto">
                 <table className="w-full text-sm">
@@ -282,8 +333,8 @@ export function CSVImport({ tournamentId }: CSVImportProps) {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {preview.slice(0, 10).map((row, i) => (
-                      <tr key={i}>
+                    {validRows.slice(0, 10).map((row) => (
+                      <tr key={row.lineNumber}>
                         {mode === 'direct' && (
                           <td className="px-4 py-2 font-medium text-gray-900">{row.teamName || '-'}</td>
                         )}
@@ -294,10 +345,10 @@ export function CSVImport({ tournamentId }: CSVImportProps) {
                         )}
                       </tr>
                     ))}
-                    {preview.length > 10 && (
+                    {validRows.length > 10 && (
                       <tr>
                         <td colSpan={3} className="px-4 py-2 text-gray-400 text-center">
-                          ... and {preview.length - 10} more
+                          ... and {validRows.length - 10} more
                         </td>
                       </tr>
                     )}
@@ -307,12 +358,20 @@ export function CSVImport({ tournamentId }: CSVImportProps) {
             </div>
           )}
 
-          {preview.length > 0 && (
+          {/* No valid rows message */}
+          {preview.length > 0 && validRows.length === 0 && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center">
+              <p className="text-red-700 font-medium">No valid rows to import</p>
+              <p className="text-red-600 text-sm mt-1">Please fix the errors above and try again</p>
+            </div>
+          )}
+
+          {validRows.length > 0 && (
             <div className="flex gap-2">
               <Button onClick={handleImport} loading={isPending}>
                 {mode === 'invite' 
-                  ? `📧 Send ${preview.length} Invitations`
-                  : `➕ Add ${preview.length} Teams`}
+                  ? `📧 Send ${validRows.length} Invitation${validRows.length > 1 ? 's' : ''}`
+                  : `➕ Add ${validRows.length} Team${validRows.length > 1 ? 's' : ''}`}
               </Button>
               <Button variant="secondary" onClick={handleClear}>
                 Clear
