@@ -103,6 +103,27 @@ export async function registerTeamForTournament(input: {
       return { success: false, error: 'Team not found' }
     }
 
+    // Check for duplicate team name in tournament (case-insensitive)
+    const duplicateName = await db.teamRegistration.findFirst({
+      where: {
+        tournamentId: validated.tournamentId,
+        registeredTeamName: {
+          equals: team.name,
+          mode: 'insensitive'
+        },
+        status: {
+          not: 'WITHDRAWN'
+        }
+      }
+    })
+
+    if (duplicateName) {
+      return { 
+        success: false, 
+        error: 'A team with this name is already registered. Please use a unique name (e.g., add A, B, or 1, 2).' 
+      }
+    }
+
     // Create registration
     const registration = await db.teamRegistration.create({
       data: {
@@ -178,6 +199,27 @@ export async function quickRegisterTeam(input: {
 
       if (invitation.tournamentId !== validated.tournamentId) {
         return { success: false, error: 'Invitation is for a different tournament' }
+      }
+    }
+
+    // Check for duplicate team name in tournament (case-insensitive)
+    const duplicateName = await db.teamRegistration.findFirst({
+      where: {
+        tournamentId: validated.tournamentId,
+        registeredTeamName: {
+          equals: validated.teamName,
+          mode: 'insensitive'
+        },
+        status: {
+          not: 'WITHDRAWN'
+        }
+      }
+    })
+
+    if (duplicateName) {
+      return { 
+        success: false, 
+        error: 'A team with this name is already registered for this tournament. Please use a unique name (e.g., add A, B, or 1, 2).' 
       }
     }
 
