@@ -4,6 +4,7 @@ import { getEvent } from '@/actions/event'
 import { BrandingSettings } from '@/components/events/branding-settings'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { formatDate } from '@/lib/utils/date'
 
 interface EventSettingsPageProps {
   params: Promise<{ eventId: string }>
@@ -61,13 +62,13 @@ export default async function EventSettingsPage({ params }: EventSettingsPagePro
               <div>
                 <dt className="text-sm text-gray-500">Start Date</dt>
                 <dd className="text-gray-900 font-medium">
-                  {new Date(event.startDate).toLocaleDateString()}
+                  {formatDate(event.startDate)}
                 </dd>
               </div>
               <div>
                 <dt className="text-sm text-gray-500">End Date</dt>
                 <dd className="text-gray-900 font-medium">
-                  {new Date(event.endDate).toLocaleDateString()}
+                  {formatDate(event.endDate)}
                 </dd>
               </div>
               <div className="col-span-2">

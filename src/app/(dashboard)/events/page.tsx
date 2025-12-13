@@ -3,6 +3,7 @@ import { getMyEvents } from '@/actions/event'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/badge'
+import { formatDateRange } from '@/lib/utils/date'
 
 export default async function EventsPage() {
   const result = await getMyEvents()
@@ -56,7 +57,7 @@ export default async function EventsPage() {
                       <StatusBadge status={event.status} />
                     </div>
                     <p className="text-sm text-gray-500 mt-1">
-                      {new Date(event.startDate).toLocaleDateString()} - {new Date(event.endDate).toLocaleDateString()}
+                      {formatDateRange(event.startDate, event.endDate)}
                     </p>
                   </div>
                   <div className="text-right">

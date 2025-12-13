@@ -83,16 +83,23 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>Teams</CardTitle>
-              <Button variant="secondary" size="sm">Add Team</Button>
+              <CardTitle>Teams ({tournament.teams.length})</CardTitle>
+              <Link href={`/events/${eventId}/tournaments/${tournamentId}/teams`}>
+                <Button variant="secondary" size="sm">Manage Teams</Button>
+              </Link>
             </div>
           </CardHeader>
           <CardContent>
             {tournament.teams.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No teams registered yet</p>
+              <div className="text-center py-4">
+                <p className="text-gray-500 mb-2">No teams registered yet</p>
+                <Link href={`/events/${eventId}/tournaments/${tournamentId}/teams`}>
+                  <Button size="sm">Invite Teams</Button>
+                </Link>
+              </div>
             ) : (
               <div className="space-y-2">
-                {tournament.teams.map((reg) => (
+                {tournament.teams.slice(0, 5).map((reg) => (
                   <div key={reg.id} className="flex justify-between items-center py-2 border-b last:border-0">
                     <div>
                       <p className="font-medium text-gray-900">{reg.team.name}</p>
@@ -103,6 +110,14 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
                     <StatusBadge status={reg.status} />
                   </div>
                 ))}
+                {tournament.teams.length > 5 && (
+                  <Link 
+                    href={`/events/${eventId}/tournaments/${tournamentId}/teams`}
+                    className="block text-center text-sm text-blue-600 hover:underline pt-2"
+                  >
+                    View all {tournament.teams.length} teams →
+                  </Link>
+                )}
               </div>
             )}
           </CardContent>

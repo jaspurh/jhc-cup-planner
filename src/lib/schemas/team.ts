@@ -41,6 +41,7 @@ export const quickRegisterTeamSchema = z.object({
   contactName: z.string().min(1, 'Contact name is required').max(100),
   contactEmail: z.email({ message: 'Invalid email address' }),
   contactPhone: z.string().max(20).optional(),
+  invitationToken: z.string().optional(),
 })
 
 export type QuickRegisterTeamInput = z.infer<typeof quickRegisterTeamSchema>
