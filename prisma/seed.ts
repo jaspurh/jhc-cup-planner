@@ -77,20 +77,43 @@ async function main() {
 
   console.log(`✅ Created demo tournament: ${demoTournament.name}`)
 
-  // Create demo pitch
-  const demoPitch = await prisma.pitch.upsert({
-    where: { id: 'demo-pitch-1' },
+  // Create demo pitches at event level
+  const demoPitch1 = await prisma.pitch.upsert({
+    where: { eventId_name: { eventId: demoEvent.id, name: 'Pitch 1' } },
     update: {},
     create: {
-      id: 'demo-pitch-1',
       name: 'Pitch 1',
-      tournamentId: demoTournament.id,
+      eventId: demoEvent.id,
       venueId: demoVenue.id,
       capacity: 50,
     },
   })
 
-  console.log(`✅ Created demo pitch: ${demoPitch.name}`)
+  const demoPitch2 = await prisma.pitch.upsert({
+    where: { eventId_name: { eventId: demoEvent.id, name: 'Pitch 2' } },
+    update: {},
+    create: {
+      name: 'Pitch 2',
+      eventId: demoEvent.id,
+      venueId: demoVenue.id,
+      capacity: 40,
+    },
+  })
+
+  // Select pitches for the demo tournament
+  await prisma.tournamentPitch.upsert({
+    where: { tournamentId_pitchId: { tournamentId: demoTournament.id, pitchId: demoPitch1.id } },
+    update: { isActive: true },
+    create: { tournamentId: demoTournament.id, pitchId: demoPitch1.id, isActive: true },
+  })
+
+  await prisma.tournamentPitch.upsert({
+    where: { tournamentId_pitchId: { tournamentId: demoTournament.id, pitchId: demoPitch2.id } },
+    update: { isActive: true },
+    create: { tournamentId: demoTournament.id, pitchId: demoPitch2.id, isActive: true },
+  })
+
+  console.log(`✅ Created demo pitches: ${demoPitch1.name}, ${demoPitch2.name}`)
 
   // Assign organizer role
   await prisma.tournamentRole.upsert({

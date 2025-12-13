@@ -108,6 +108,7 @@ model Event {
   owner       User         @relation("EventOwner", fields: [ownerId], references: [id])
   tournaments Tournament[]
   venues      Venue[]
+  pitches     Pitch[]
 
   @@index([ownerId])
   @@index([slug])
@@ -148,7 +149,7 @@ model Tournament {
   event                 Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
   stages                Stage[]
   teams                 TeamRegistration[]
-  pitches               Pitch[]
+  pitches               TournamentPitch[]
   roles                 TournamentRole[]
   invitations           Invitation[]
 
@@ -216,9 +217,11 @@ model Stage {
 }
 
 enum StageType {
-  GROUP_STAGE
-  KNOCKOUT
-  FINAL
+  GROUP_STAGE         // Round-robin within groups
+  KNOCKOUT            // Single elimination bracket
+  DOUBLE_ELIMINATION  // Winners and losers brackets
+  ROUND_ROBIN         // All teams play each other (no groups)
+  FINAL               // Championship and placement matches
 }
 
 model Group {
@@ -508,18 +511,38 @@ model Pitch {
   id           String   @id @default(cuid())
   name         String
   venueId      String?
-  tournamentId String
+  eventId      String
   capacity     Int?
-  
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  venue        Venue?     @relation(fields: [venueId], references: [id])
-  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  venue        Venue?            @relation(fields: [venueId], references: [id])
+  event        Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tournaments  TournamentPitch[]
   matches      Match[]
 
-  @@index([tournamentId])
+  @@unique([eventId, name])
+  @@index([eventId])
   @@index([venueId])
+}
+
+// Junction table for tournament-pitch relationship
+model TournamentPitch {
+  id           String   @id @default(cuid())
+  tournamentId String
+  pitchId      String
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+
+  createdAt    DateTime @default(now())
+
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  pitch        Pitch      @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, pitchId])
+  @@index([tournamentId])
+  @@index([pitchId])
 }
 
 // ==========================================

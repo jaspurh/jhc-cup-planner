@@ -76,14 +76,20 @@ export async function getTournament(tournamentId: string): Promise<ActionResult<
           orderBy: { registeredAt: 'desc' }
         },
         pitches: {
+          where: { isActive: true },
           include: {
-            venue: {
-              select: {
-                id: true,
-                name: true
+            pitch: {
+              include: {
+                venue: {
+                  select: {
+                    id: true,
+                    name: true
+                  }
+                }
               }
             }
-          }
+          },
+          orderBy: { displayOrder: 'asc' }
         }
       }
     })
@@ -138,11 +144,11 @@ export async function getTournament(tournamentId: string): Promise<ActionResult<
         confirmedAt: reg.confirmedAt,
         team: reg.team
       })),
-      pitches: tournament.pitches.map(pitch => ({
-        id: pitch.id,
-        name: pitch.name,
-        capacity: pitch.capacity,
-        venue: pitch.venue
+      pitches: tournament.pitches.map(tp => ({
+        id: tp.pitch.id,
+        name: tp.pitch.name,
+        capacity: tp.pitch.capacity,
+        venue: tp.pitch.venue
       }))
     }
 

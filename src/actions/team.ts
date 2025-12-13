@@ -281,6 +281,206 @@ export async function quickRegisterTeam(input: {
 }
 
 /**
+ * Add team directly to tournament (admin action)
+ * Creates team and registers as confirmed immediately
+ */
+export async function addTeamDirectly(input: {
+  tournamentId: string
+  teamName: string
+  contactName?: string
+  contactEmail?: string
+  contactPhone?: string
+}): Promise<ActionResult<{ teamId: string; registrationId: string }>> {
+  try {
+    const session = await auth()
+    
+    if (!session?.user?.id) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    // Verify tournament exists and user has access
+    const tournament = await db.tournament.findFirst({
+      where: { 
+        id: input.tournamentId,
+        event: { ownerId: session.user.id }
+      },
+      include: { event: true }
+    })
+
+    if (!tournament) {
+      return { success: false, error: 'Tournament not found or access denied' }
+    }
+
+    // Check for duplicate team name (case-insensitive)
+    const duplicateName = await db.teamRegistration.findFirst({
+      where: {
+        tournamentId: input.tournamentId,
+        registeredTeamName: {
+          equals: input.teamName,
+          mode: 'insensitive'
+        },
+        status: {
+          not: 'WITHDRAWN'
+        }
+      }
+    })
+
+    if (duplicateName) {
+      return { 
+        success: false, 
+        error: 'A team with this name is already registered. Please use a unique name.' 
+      }
+    }
+
+    // Create team and registration in transaction
+    const result = await db.$transaction(async (tx) => {
+      // Create team
+      const team = await tx.team.create({
+        data: {
+          name: input.teamName,
+          contactName: input.contactName,
+          contactEmail: input.contactEmail,
+          contactPhone: input.contactPhone,
+          createdById: session.user.id,
+        }
+      })
+
+      // Create registration as CONFIRMED
+      const registration = await tx.teamRegistration.create({
+        data: {
+          teamId: team.id,
+          tournamentId: input.tournamentId,
+          status: 'CONFIRMED',
+          registeredTeamName: input.teamName,
+          confirmedAt: new Date(),
+        }
+      })
+
+      return { teamId: team.id, registrationId: registration.id }
+    })
+
+    logger.info('Team added directly to tournament', { 
+      teamId: result.teamId,
+      registrationId: result.registrationId,
+      tournamentId: input.tournamentId,
+      addedBy: session.user.id
+    })
+
+    return { success: true, data: result }
+  } catch (error) {
+    logger.error('Failed to add team directly', { error })
+    return { success: false, error: 'Failed to add team' }
+  }
+}
+
+/**
+ * Add multiple teams directly to tournament (admin action)
+ * Creates teams and registers as confirmed immediately
+ */
+export async function addTeamsBulk(input: {
+  tournamentId: string
+  teams: Array<{
+    teamName: string
+    contactName?: string
+    contactEmail?: string
+    contactPhone?: string
+  }>
+}): Promise<ActionResult<{ created: number; skipped: number; errors: string[] }>> {
+  try {
+    const session = await auth()
+    
+    if (!session?.user?.id) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    // Verify tournament exists and user has access
+    const tournament = await db.tournament.findFirst({
+      where: { 
+        id: input.tournamentId,
+        event: { ownerId: session.user.id }
+      }
+    })
+
+    if (!tournament) {
+      return { success: false, error: 'Tournament not found or access denied' }
+    }
+
+    // Get existing team names for duplicate check
+    const existingRegistrations = await db.teamRegistration.findMany({
+      where: {
+        tournamentId: input.tournamentId,
+        status: { not: 'WITHDRAWN' }
+      },
+      select: { registeredTeamName: true }
+    })
+
+    const existingNames = new Set(
+      existingRegistrations
+        .map(r => r.registeredTeamName?.toLowerCase())
+        .filter(Boolean)
+    )
+
+    let created = 0
+    let skipped = 0
+    const errors: string[] = []
+
+    for (const teamData of input.teams) {
+      const normalizedName = teamData.teamName.toLowerCase()
+
+      // Check for duplicate
+      if (existingNames.has(normalizedName)) {
+        skipped++
+        continue
+      }
+
+      try {
+        // Create team and registration
+        await db.$transaction(async (tx) => {
+          const team = await tx.team.create({
+            data: {
+              name: teamData.teamName,
+              contactName: teamData.contactName,
+              contactEmail: teamData.contactEmail,
+              contactPhone: teamData.contactPhone,
+              createdById: session.user.id,
+            }
+          })
+
+          await tx.teamRegistration.create({
+            data: {
+              teamId: team.id,
+              tournamentId: input.tournamentId,
+              status: 'CONFIRMED',
+              registeredTeamName: teamData.teamName,
+              confirmedAt: new Date(),
+            }
+          })
+        })
+
+        existingNames.add(normalizedName)
+        created++
+      } catch (err) {
+        errors.push(`Failed to add "${teamData.teamName}"`)
+        logger.error('Failed to add team in bulk', { teamName: teamData.teamName, error: err })
+      }
+    }
+
+    logger.info('Bulk team add completed', { 
+      tournamentId: input.tournamentId,
+      created,
+      skipped,
+      errors: errors.length,
+      addedBy: session.user.id
+    })
+
+    return { success: true, data: { created, skipped, errors } }
+  } catch (error) {
+    logger.error('Failed to add teams in bulk', { error })
+    return { success: false, error: 'Failed to add teams' }
+  }
+}
+
+/**
  * Update registration status (confirm, reject, withdraw)
  */
 export async function updateRegistrationStatus(

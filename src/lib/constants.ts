@@ -170,7 +170,9 @@ export function formatTournamentStyle(style: TournamentStyle | string): string {
  */
 export const STAGE_TYPE_LABELS: Record<StageType, string> = {
   GROUP_STAGE: 'Group Stage',
+  ROUND_ROBIN: 'Round Robin',
   KNOCKOUT: 'Knockout',
+  DOUBLE_ELIMINATION: 'Double Elimination',
   FINAL: 'Final',
 }
 
@@ -255,3 +257,18 @@ export const CLUB_STATUS_CONFIG: Record<ClubStatus, StatusConfig> = {
   ACTIVE: { label: 'Active', variant: 'success' },
   INACTIVE: { label: 'Inactive', variant: 'default' },
 }
+
+// ===========================================
+// Stage Type Options
+// ===========================================
+
+/**
+ * Stage type options for select dropdowns
+ */
+export const STAGE_TYPE_OPTIONS: { value: StageType; label: string; description: string }[] = [
+  { value: 'GROUP_STAGE', label: 'Group Stage', description: 'Round-robin matches within groups' },
+  { value: 'ROUND_ROBIN', label: 'Round Robin', description: 'All teams play each other (no groups)' },
+  { value: 'KNOCKOUT', label: 'Knockout', description: 'Single elimination bracket' },
+  { value: 'DOUBLE_ELIMINATION', label: 'Double Elimination', description: 'Winners & losers brackets' },
+  { value: 'FINAL', label: 'Final', description: 'Championship and placement matches' },
+]
