@@ -4,6 +4,12 @@
  * Centralized date formatting to ensure consistent output between
  * server and client (avoiding hydration mismatches).
  * 
+ * STRATEGY:
+ * - Date-only displays (event dates, registration dates) use UTC to avoid
+ *   date boundary issues and ensure server/client consistency.
+ * - Time displays (match times, schedules) should use the <LocalTime> component
+ *   which renders client-side only to show the user's local timezone.
+ * 
  * MAINTAINER NOTE: All date formatting should use these functions.
  */
 
@@ -19,8 +25,11 @@
 const DEFAULT_LOCALE = 'en-GB'
 
 /**
- * Default timezone for date formatting.
+ * Default timezone for DATE-ONLY formatting.
  * Using UTC ensures consistent rendering regardless of server/client timezone.
+ * 
+ * Note: For times that need to show in user's local timezone,
+ * use the <LocalTime> component instead.
  */
 const DEFAULT_TIMEZONE = 'UTC'
 

@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/badge'
 import { formatTournamentFormat, formatTournamentStyle } from '@/lib/constants'
-import { formatDateRange, formatTime } from '@/lib/utils/date'
+import { formatDateRange } from '@/lib/utils/date'
+import { LocalTimeOnly } from '@/components/ui/local-time'
 
 interface EventPageProps {
   params: Promise<{ eventId: string }>
@@ -100,7 +101,7 @@ export default async function EventPage({ params }: EventPageProps) {
                         <div className="flex justify-between">
                           <span className="text-gray-500">Start</span>
                           <span className="text-gray-900">
-                            {formatTime(tournament.startTime)}
+                            <LocalTimeOnly date={tournament.startTime} />
                           </span>
                         </div>
                       )}
