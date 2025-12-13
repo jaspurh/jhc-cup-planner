@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getEvent } from '@/actions/event'
 import { BrandingSettings } from '@/components/events/branding-settings'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { EventDetailsForm, EventDeleteSection } from '@/components/events/event-details-form'
 import { Button } from '@/components/ui/button'
 
 interface EventSettingsPageProps {
@@ -42,41 +42,8 @@ export default async function EventSettingsPage({ params }: EventSettingsPagePro
       </div>
 
       <div className="space-y-8">
-        {/* Event Details Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Event Details</CardTitle>
-            <CardDescription>Basic information about your event</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-2 gap-4">
-              <div>
-                <dt className="text-sm text-gray-500">Name</dt>
-                <dd className="text-gray-900 font-medium">{event.name}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-gray-500">Status</dt>
-                <dd className="text-gray-900 font-medium">{event.status}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-gray-500">Start Date</dt>
-                <dd className="text-gray-900 font-medium">
-                  {new Date(event.startDate).toLocaleDateString()}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm text-gray-500">End Date</dt>
-                <dd className="text-gray-900 font-medium">
-                  {new Date(event.endDate).toLocaleDateString()}
-                </dd>
-              </div>
-              <div className="col-span-2">
-                <dt className="text-sm text-gray-500">Description</dt>
-                <dd className="text-gray-900">{event.description || 'No description'}</dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
+        {/* Event Details Form */}
+        <EventDetailsForm event={event} />
 
         {/* Branding Settings */}
         <BrandingSettings 
@@ -90,23 +57,7 @@ export default async function EventSettingsPage({ params }: EventSettingsPagePro
         />
 
         {/* Danger Zone */}
-        <Card className="border-red-200">
-          <CardHeader>
-            <CardTitle className="text-red-600">Danger Zone</CardTitle>
-            <CardDescription>Irreversible actions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900">Delete Event</p>
-                <p className="text-sm text-gray-500">
-                  Permanently delete this event and all its tournaments
-                </p>
-              </div>
-              <Button variant="danger">Delete Event</Button>
-            </div>
-          </CardContent>
-        </Card>
+        <EventDeleteSection event={event} />
       </div>
     </div>
   )

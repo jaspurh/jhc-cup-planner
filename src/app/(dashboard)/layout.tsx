@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { db } from '@/lib/db'
 
 export default async function DashboardLayout({
   children,
@@ -12,6 +13,13 @@ export default async function DashboardLayout({
   if (!session?.user) {
     redirect('/login')
   }
+
+  // Check if user is admin to show admin links
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: { platformRole: true }
+  })
+  const isAdmin = user?.platformRole === 'ADMIN'
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -38,6 +46,29 @@ export default async function DashboardLayout({
                 >
                   Events
                 </Link>
+                {isAdmin && (
+                  <>
+                    <span className="inline-flex items-center text-gray-300">|</span>
+                    <Link 
+                      href="/admin/clubs" 
+                      className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:border-gray-300 hover:text-gray-700"
+                    >
+                      Clubs
+                    </Link>
+                    <Link 
+                      href="/admin/teams" 
+                      className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:border-gray-300 hover:text-gray-700"
+                    >
+                      Teams
+                    </Link>
+                    <Link 
+                      href="/admin/users" 
+                      className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:border-gray-300 hover:text-gray-700"
+                    >
+                      Users
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
             <div className="flex items-center">

@@ -16,6 +16,8 @@ import type {
   RegistrationStatus,
   MatchStatus,
   InvitationStatus,
+  RegistrationMode,
+  ClubStatus,
 } from '@/types'
 
 // ===========================================
@@ -200,3 +202,56 @@ export const TIMING_CONSTRAINTS = {
   minTransitionTime: 0,
   maxTransitionTime: 30,
 } as const
+
+// ===========================================
+// Registration Mode Labels
+// ===========================================
+
+/**
+ * Display labels for registration modes
+ */
+export const REGISTRATION_MODE_LABELS: Record<RegistrationMode, string> = {
+  OPEN: 'Open Registration',
+  INVITE_ONLY: 'Invite Only',
+  CLUB_ADMIN: 'Club Admin Only',
+  CLUB_MEMBERS: 'Club Members Only',
+}
+
+/**
+ * Registration mode descriptions for help text
+ */
+export const REGISTRATION_MODE_DESCRIPTIONS: Record<RegistrationMode, string> = {
+  OPEN: 'Anyone with the registration link can register a team',
+  INVITE_ONLY: 'Only teams that receive an invitation can register',
+  CLUB_ADMIN: 'Only club administrators can register teams for their club',
+  CLUB_MEMBERS: 'Only users affiliated with a registered club can register',
+}
+
+/**
+ * Registration mode options for select dropdowns
+ */
+export const REGISTRATION_MODE_OPTIONS: { value: RegistrationMode; label: string; description: string }[] = [
+  { value: 'OPEN', label: 'Open Registration', description: 'Anyone can register' },
+  { value: 'INVITE_ONLY', label: 'Invite Only', description: 'By invitation only' },
+  { value: 'CLUB_ADMIN', label: 'Club Admin Only', description: 'Club admins register for their club' },
+  { value: 'CLUB_MEMBERS', label: 'Club Members Only', description: 'Registered club members only' },
+]
+
+/**
+ * Format registration mode enum to display label
+ */
+export function formatRegistrationMode(mode: RegistrationMode | string): string {
+  return REGISTRATION_MODE_LABELS[mode as RegistrationMode] || mode
+}
+
+// ===========================================
+// Club Status Labels
+// ===========================================
+
+/**
+ * Club status display configuration
+ */
+export const CLUB_STATUS_CONFIG: Record<ClubStatus, StatusConfig> = {
+  ACTIVE: { label: 'Active', variant: 'success' },
+  INACTIVE: { label: 'Inactive', variant: 'default' },
+}

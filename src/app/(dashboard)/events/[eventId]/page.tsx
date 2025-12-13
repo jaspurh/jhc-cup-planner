@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/badge'
 import { formatTournamentFormat, formatTournamentStyle } from '@/lib/constants'
+import { formatDateRange } from '@/lib/utils/date'
+import { LocalTimeOnly } from '@/components/ui/local-time'
 
 interface EventPageProps {
   params: Promise<{ eventId: string }>
@@ -37,7 +39,7 @@ export default async function EventPage({ params }: EventPageProps) {
             <StatusBadge status={event.status} />
           </div>
           <p className="text-gray-500 mt-1">
-            {new Date(event.startDate).toLocaleDateString()} - {new Date(event.endDate).toLocaleDateString()}
+            {formatDateRange(event.startDate, event.endDate)}
           </p>
           {event.description && (
             <p className="text-gray-600 mt-2">{event.description}</p>
@@ -99,7 +101,7 @@ export default async function EventPage({ params }: EventPageProps) {
                         <div className="flex justify-between">
                           <span className="text-gray-500">Start</span>
                           <span className="text-gray-900">
-                            {new Date(tournament.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            <LocalTimeOnly date={tournament.startTime} />
                           </span>
                         </div>
                       )}
