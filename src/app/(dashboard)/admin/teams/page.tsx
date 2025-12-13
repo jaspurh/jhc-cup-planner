@@ -62,7 +62,7 @@ export default async function AdminTeamsPage() {
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{team.name}</span>
+                        <span className="font-medium text-gray-900">{team.name}</span>
                         {team.primaryClub && (
                           <span 
                             className="text-xs px-2 py-0.5 rounded-full text-white"

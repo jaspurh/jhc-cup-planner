@@ -62,7 +62,7 @@ export default async function AdminUsersPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{u.name || 'Unnamed'}</span>
+                      <span className="font-medium text-gray-900">{u.name || 'Unnamed'}</span>
                       <Badge variant={roleVariant(u.platformRole)}>
                         {u.platformRole}
                       </Badge>
