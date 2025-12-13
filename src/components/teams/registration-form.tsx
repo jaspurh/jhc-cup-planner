@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -25,9 +26,9 @@ export function RegistrationForm({
   invitationToken,
   prefillData 
 }: RegistrationFormProps) {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -48,33 +49,16 @@ export function RegistrationForm({
     setLoading(false)
 
     if (result.success) {
-      setSuccess(true)
+      // Redirect to success page
+      const params = new URLSearchParams({
+        tournament: tournamentName,
+        event: eventName,
+        invited: invitationToken ? 'true' : 'false',
+      })
+      router.push(`/register/success?${params.toString()}`)
     } else {
       setError(result.error || 'Failed to register')
     }
-  }
-
-  if (success) {
-    return (
-      <Card className="max-w-lg mx-auto">
-        <CardContent className="py-12 text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Registration Complete!</h2>
-          <p className="text-gray-500 mb-4">
-            {invitationToken 
-              ? 'Your team has been confirmed for the tournament.'
-              : 'Your registration has been submitted and is pending confirmation.'}
-          </p>
-          <p className="text-sm text-gray-400">
-            You will receive updates at the email address provided.
-          </p>
-        </CardContent>
-      </Card>
-    )
   }
 
   return (
