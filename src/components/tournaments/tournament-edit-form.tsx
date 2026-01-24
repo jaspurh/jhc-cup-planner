@@ -31,6 +31,7 @@ export function TournamentEditForm({ tournament, eventId }: TournamentEditFormPr
     setError(null)
 
     const formData = new FormData(e.currentTarget)
+    const startTimeValue = formData.get('startTime') as string
 
     const result = await updateTournament(tournament.id, {
       name: formData.get('name') as string,
@@ -39,6 +40,7 @@ export function TournamentEditForm({ tournament, eventId }: TournamentEditFormPr
       format: formData.get('format') as 'GROUP_STAGE' | 'KNOCKOUT' | 'DOUBLE_ELIMINATION' | 'GROUP_KNOCKOUT' | 'ROUND_ROBIN',
       matchDurationMinutes: parseInt(formData.get('matchDurationMinutes') as string),
       transitionTimeMinutes: parseInt(formData.get('transitionTimeMinutes') as string),
+      startTime: startTimeValue ? new Date(startTimeValue) : null,
     })
 
     setLoading(false)
@@ -136,6 +138,23 @@ export function TournamentEditForm({ tournament, eventId }: TournamentEditFormPr
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tournament Start Time
+              </label>
+              <input
+                name="startTime"
+                type="datetime-local"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                defaultValue={tournament.startTime 
+                  ? new Date(tournament.startTime).toISOString().slice(0, 16) 
+                  : ''}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Required for schedule generation
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
