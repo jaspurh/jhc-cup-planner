@@ -180,7 +180,7 @@ function MatchRow({ match, showPitch }: { match: ScheduledMatch; showPitch: bool
 
         {/* Time */}
         <div className="w-20">
-          <span className="font-mono text-sm">{formatTime(match.scheduledStartTime)}</span>
+          <span className="font-mono text-sm font-semibold text-gray-900">{formatTime(match.scheduledStartTime)}</span>
         </div>
 
         {/* Teams */}

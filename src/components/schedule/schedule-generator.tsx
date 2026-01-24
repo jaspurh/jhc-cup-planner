@@ -13,8 +13,7 @@ import {
 
 interface ScheduleGeneratorProps {
   tournamentId: string
-  eventSlug: string
-  tournamentSlug: string
+  eventId: string
   hasStages: boolean
   hasPitches: boolean
   hasTeams: boolean
@@ -24,8 +23,7 @@ interface ScheduleGeneratorProps {
 
 export function ScheduleGenerator({
   tournamentId,
-  eventSlug,
-  tournamentSlug,
+  eventId,
   hasStages,
   hasPitches,
   hasTeams,
@@ -66,7 +64,7 @@ export function ScheduleGenerator({
       if (result.success) {
         setPreview(null)
         setShowConfirm(false)
-        router.push(`/events/${eventSlug}/tournaments/${tournamentSlug}/schedule`)
+        router.push(`/events/${eventId}/tournaments/${tournamentId}/schedule`)
       } else {
         setError(result.error || 'Failed to generate schedule')
       }
@@ -174,7 +172,7 @@ export function ScheduleGenerator({
         <>
           <Button
             variant="secondary"
-            onClick={() => router.push(`/events/${eventSlug}/tournaments/${tournamentSlug}/schedule`)}
+            onClick={() => router.push(`/events/${eventId}/tournaments/${tournamentId}/schedule`)}
           >
             View Schedule ({existingMatchCount} matches)
           </Button>

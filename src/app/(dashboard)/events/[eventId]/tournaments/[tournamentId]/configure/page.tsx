@@ -72,8 +72,7 @@ export default async function TournamentConfigurePage({ params }: ConfigurePageP
           </div>
           <ScheduleGenerator
             tournamentId={tournamentId}
-            eventSlug={eventId}
-            tournamentSlug={tournament.slug}
+            eventId={eventId}
             hasStages={hasStages}
             hasPitches={hasPitches}
             hasTeams={hasTeamsAssigned}

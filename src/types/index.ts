@@ -133,6 +133,8 @@ export interface TournamentWithDetails {
     id: string
     name: string
     slug: string
+    startDate: Date
+    endDate: Date
   }
   stages: StageWithGroups[]
   teams: TeamRegistrationWithTeam[]

@@ -43,6 +43,7 @@ export default async function EditTournamentPage({ params }: EditTournamentPageP
       <TournamentEditForm 
         tournament={tournament}
         eventId={eventId}
+        eventDates={{ start: tournament.event.startDate, end: tournament.event.endDate }}
       />
     </div>
   )

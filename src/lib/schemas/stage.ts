@@ -27,7 +27,7 @@ export const gslGroupsConfigSchema = z.object({
 
 // Knockout stage configuration
 export const knockoutStageConfigSchema = z.object({
-  numMatches: z.number().int().min(1).max(32),
+  advancingTeamCount: z.number().int().min(2).max(64),
   seedingRule: z.enum(['1v2', 'custom']).default('1v2'),
   hasThirdPlace: z.boolean().default(false),
 })
@@ -38,12 +38,19 @@ export const doubleEliminationConfigSchema = z.object({
   hasGrandFinalReset: z.boolean().default(true),
 })
 
+// Finals stage configuration
+export const finalsStageConfigSchema = z.object({
+  advancingTeamCount: z.number().int().min(1).max(8),
+  hasThirdPlace: z.boolean().default(false),
+})
+
 // Stage configuration union
 export const stageConfigurationSchema = z.union([
   groupStageConfigSchema,
   gslGroupsConfigSchema,
   knockoutStageConfigSchema,
   doubleEliminationConfigSchema,
+  finalsStageConfigSchema,
 ])
 
 // Create stage schema

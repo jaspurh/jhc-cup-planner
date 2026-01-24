@@ -26,7 +26,8 @@ import {
 function findNextAvailableSlot(
   pitches: PitchSlot[],
   afterTime: Date,
-  durationMinutes: number
+  durationMinutes: number,
+  transitionMinutes: number
 ): { pitchId: string; startTime: Date; endTime: Date } | null {
   let earliestSlot: { pitchId: string; startTime: Date; endTime: Date } | null = null
 
@@ -38,10 +39,11 @@ function findNextAvailableSlot(
     for (const match of pitch.scheduledMatches.sort((a, b) => a.startTime.getTime() - b.startTime.getTime())) {
       const potentialEnd = new Date(potentialStart.getTime() + durationMinutes * 60000)
       
-      // Check for overlap
-      if (potentialStart < match.endTime && potentialEnd > match.startTime) {
-        // Conflict - move start time to after this match
-        potentialStart = new Date(match.endTime)
+      // Check for overlap (including transition time after previous match)
+      const matchEndWithTransition = new Date(match.endTime.getTime() + transitionMinutes * 60000)
+      if (potentialStart < matchEndWithTransition && potentialEnd > match.startTime) {
+        // Conflict - move start time to after this match plus transition
+        potentialStart = matchEndWithTransition
       }
     }
 
@@ -213,7 +215,7 @@ export function allocateTimeSlots(
       const searchFrom = new Date(earliestStart.getTime() + timing.transitionTimeMinutes * 60000)
 
       // Find next available slot
-      const slot = findNextAvailableSlot(pitches, searchFrom, timing.matchDurationMinutes)
+      const slot = findNextAvailableSlot(pitches, searchFrom, timing.matchDurationMinutes, timing.transitionTimeMinutes)
 
       if (!slot) {
         errors.push(`Could not allocate time slot for match ${match.tempId}`)
@@ -256,7 +258,7 @@ export function allocateTimeSlots(
 
       const earliestStart = getEarliestStartTime(match, allocatedMatches, stageStartTime)
       const searchFrom = new Date(earliestStart.getTime() + timing.transitionTimeMinutes * 60000)
-      const slot = findNextAvailableSlot(pitches, searchFrom, timing.matchDurationMinutes)
+      const slot = findNextAvailableSlot(pitches, searchFrom, timing.matchDurationMinutes, timing.transitionTimeMinutes)
 
       if (!slot) {
         errors.push(`Could not allocate time slot for match ${match.tempId}`)

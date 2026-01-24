@@ -35,7 +35,9 @@ export async function getTournament(tournamentId: string): Promise<ActionResult<
           select: {
             id: true,
             name: true,
-            slug: true
+            slug: true,
+            startDate: true,
+            endDate: true,
           }
         },
         stages: {

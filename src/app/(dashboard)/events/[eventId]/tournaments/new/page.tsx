@@ -28,7 +28,11 @@ export default async function NewTournamentPage({ params }: NewTournamentPagePro
         <span className="text-gray-900">New Tournament</span>
       </nav>
 
-      <TournamentForm eventId={eventId} eventName={event.name} />
+      <TournamentForm 
+        eventId={eventId} 
+        eventName={event.name}
+        eventDates={{ start: event.startDate, end: event.endDate }}
+      />
     </div>
   )
 }
