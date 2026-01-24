@@ -293,13 +293,15 @@ export function generateGSLMatches(
  * @param stageId - Stage ID
  * @param seedOrder - Optional seed order for matchups (legacy, use incomingTeams instead)
  * @param incomingTeams - Teams coming from previous stages with source labels
+ * @param hasThirdPlace - Whether to include a 3rd place match
  * @returns Array of generated matches
  */
 export function generateKnockoutMatches(
   teamCount: number,
   stageId: string,
   seedOrder?: string[],
-  incomingTeams?: IncomingTeamSlot[]
+  incomingTeams?: IncomingTeamSlot[],
+  hasThirdPlace: boolean = false
 ): GeneratedMatch[] {
   const matches: GeneratedMatch[] = []
   
@@ -429,6 +431,30 @@ export function generateKnockoutMatches(
       roundIds.push(tempId)
     }
     matchIdsByRound.set(round, roundIds)
+  }
+
+  // Add 3rd place match if requested and we have semifinals (4+ teams)
+  if (hasThirdPlace && numRounds >= 2) {
+    const semifinalIds = matchIdsByRound.get(numRounds - 1) || []
+    if (semifinalIds.length === 2) {
+      const thirdPlaceMatch: GeneratedMatch = {
+        tempId: `${stageId.slice(-6)}-3P`,
+        stageId,
+        groupId: undefined,
+        homeRegistrationId: null,
+        awayRegistrationId: null,
+        matchNumber: matchNumber++,
+        roundNumber: numRounds, // Same round as final but scheduled before
+        bracketPosition: '3P',
+        dependsOn: semifinalIds.filter(id => !id.startsWith('BYE-')),
+        metadata: {
+          homeSource: `Loser of ${semifinalIds[0].split('-').pop()}`,
+          awaySource: `Loser of ${semifinalIds[1].split('-').pop()}`,
+          isThirdPlace: true,
+        },
+      }
+      matches.push(thirdPlaceMatch)
+    }
   }
 
   return matches
@@ -674,7 +700,8 @@ export function generateStageMatches(stage: StageConfig): GeneratedMatch[] {
 
     case 'KNOCKOUT':
       const knockoutTeamCount = stage.advancingTeamCount || 0
-      return generateKnockoutMatches(knockoutTeamCount, stage.stageId, undefined, stage.incomingTeams)
+      const hasThirdPlace = (stage.customConfig as { hasThirdPlace?: boolean })?.hasThirdPlace || false
+      return generateKnockoutMatches(knockoutTeamCount, stage.stageId, undefined, stage.incomingTeams, hasThirdPlace)
 
     case 'DOUBLE_ELIMINATION':
       const deTeamCount = stage.advancingTeamCount || 0
@@ -701,8 +728,8 @@ export function generateStageMatches(stage: StageConfig): GeneratedMatch[] {
       }]
       
       // Check if there's a 3rd place match
-      const hasThirdPlace = (stage.customConfig as { hasThirdPlace?: boolean })?.hasThirdPlace
-      if (hasThirdPlace) {
+      const includeThirdPlace = (stage.customConfig as { hasThirdPlace?: boolean })?.hasThirdPlace
+      if (includeThirdPlace) {
         const thirdPlace1 = stage.incomingTeams?.find(t => t.seedPosition === 3)
         const thirdPlace2 = stage.incomingTeams?.find(t => t.seedPosition === 4)
         matches.push({

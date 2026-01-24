@@ -127,6 +127,16 @@ function sortByPriority(
     if (a.dependsOn.length !== b.dependsOn.length) {
       return a.dependsOn.length - b.dependsOn.length
     }
+    
+    // 3rd place match should be scheduled before final
+    const aIsThirdPlace = a.metadata?.isThirdPlace === true
+    const bIsThirdPlace = b.metadata?.isThirdPlace === true
+    const aIsFinal = a.bracketPosition === 'F'
+    const bIsFinal = b.bracketPosition === 'F'
+    
+    if (aIsThirdPlace && bIsFinal) return -1
+    if (bIsThirdPlace && aIsFinal) return 1
+    
     // Then by match number
     return a.matchNumber - b.matchNumber
   })

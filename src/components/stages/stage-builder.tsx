@@ -128,6 +128,7 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
     roundRobinType?: 'SINGLE' | 'DOUBLE'
     numMatches?: number
     groupSchedulingMode?: 'sequential' | 'interleaved'
+    hasThirdPlace?: boolean
   }) => {
     setError(null)
     
@@ -137,7 +138,10 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
           roundRobinType: config.roundRobinType || 'SINGLE',
           groupSchedulingMode: config.groupSchedulingMode || 'sequential',
         }
-      : { advancingTeamCount: config.numMatches || 4 }
+      : { 
+          advancingTeamCount: config.numMatches || 4,
+          hasThirdPlace: config.hasThirdPlace || false,
+        }
 
     const result = await createStage({
       name: config.name,
@@ -332,6 +336,7 @@ interface AddStageFormProps {
     roundRobinType?: 'SINGLE' | 'DOUBLE'
     numMatches?: number
     groupSchedulingMode?: 'sequential' | 'interleaved'
+    hasThirdPlace?: boolean
   }) => void
   onCancel: () => void
   isPending: boolean
@@ -344,6 +349,7 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
   const [numGroups, setNumGroups] = useState(4)
   const [roundRobinType, setRoundRobinType] = useState<'SINGLE' | 'DOUBLE'>('SINGLE')
   const [numMatches, setNumMatches] = useState(4)
+  const [hasThirdPlace, setHasThirdPlace] = useState(false)
   const [groupSchedulingMode, setGroupSchedulingMode] = useState<'sequential' | 'interleaved'>('sequential')
 
   const selectedTemplate = STAGE_TEMPLATES.find(t => t.type === selectedType)
@@ -357,6 +363,7 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
       roundRobinType: selectedTemplate.hasGroups ? roundRobinType : undefined,
       numMatches: !selectedTemplate.hasGroups ? numMatches : undefined,
       groupSchedulingMode: selectedTemplate.hasGroups ? groupSchedulingMode : undefined,
+      hasThirdPlace: selectedTemplate.configType === 'knockout' ? hasThirdPlace : undefined,
     })
   }
 
@@ -495,24 +502,41 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
 
           {/* Knockout specific */}
           {selectedTemplate?.configType === 'knockout' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Number of Teams Advancing
-              </label>
-              <select
-                value={numMatches}
-                onChange={(e) => setNumMatches(parseInt(e.target.value))}
-                className="border rounded-md px-3 py-2 text-gray-900 bg-white"
-              >
-                <option value={2}>2 teams (Final only)</option>
-                <option value={4}>4 teams (Semifinals)</option>
-                <option value={8}>8 teams (Quarterfinals)</option>
-                <option value={16}>16 teams (Round of 16)</option>
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Single elimination bracket - specify how many teams advance from previous stage
-              </p>
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Number of Teams Advancing
+                </label>
+                <select
+                  value={numMatches}
+                  onChange={(e) => setNumMatches(parseInt(e.target.value))}
+                  className="border rounded-md px-3 py-2 text-gray-900 bg-white"
+                >
+                  <option value={2}>2 teams (Final only)</option>
+                  <option value={4}>4 teams (Semifinals)</option>
+                  <option value={8}>8 teams (Quarterfinals)</option>
+                  <option value={16}>16 teams (Round of 16)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Single elimination bracket - specify how many teams advance from previous stage
+                </p>
+              </div>
+              
+              {numMatches >= 4 && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="hasThirdPlace"
+                    checked={hasThirdPlace}
+                    onChange={(e) => setHasThirdPlace(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="hasThirdPlace" className="text-sm text-gray-700">
+                    Include 3rd place match (semifinal losers)
+                  </label>
+                </div>
+              )}
+            </>
           )}
 
           {/* Finals specific */}

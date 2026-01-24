@@ -41,6 +41,8 @@ export interface GeneratedMatch {
     isDecider?: boolean
     /** Bracket type for double elimination */
     bracketType?: 'winners' | 'losers' | 'grand_final'
+    /** Is this a 3rd place match? */
+    isThirdPlace?: boolean
   }
 }
 
