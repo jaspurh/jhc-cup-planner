@@ -222,6 +222,9 @@ export interface ScheduledMatch {
     id: string
     teamName: string
   } | null
+  // Source labels for TBD teams (e.g., "Winner Group A", "2nd Group B")
+  homeTeamSource: string | null
+  awayTeamSource: string | null
   result: {
     homeScore: number
     awayScore: number

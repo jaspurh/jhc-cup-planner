@@ -160,13 +160,22 @@ interface DBStage {
  * Convert database stage data to StageConfig for scheduling
  */
 export function dbStageToConfig(stage: DBStage): StageConfig {
+  const config = stage.configuration as Record<string, unknown> | undefined
+  
+  // For knockout/finals stages, get advancingTeamCount from config or count team assignments
+  const teamsFromGroups = stage.groups.reduce(
+    (sum, g) => sum + g.teamAssignments.length, 
+    0
+  )
+  const advancingTeamCount = (config?.advancingTeamCount as number) || teamsFromGroups || 0
+
   return {
     stageId: stage.id,
     stageName: stage.name,
     type: stage.type,
     order: stage.order,
     gapMinutesBefore: stage.gapMinutesBefore,
-    customConfig: stage.configuration as Record<string, unknown> | undefined,
+    customConfig: config,
     groups: stage.groups.map(group => ({
       groupId: group.id,
       groupName: group.name,
@@ -177,11 +186,7 @@ export function dbStageToConfig(stage: DBStage): StageConfig {
         teamName: ta.registration.registeredTeamName || ta.registration.team.name,
       })),
     })),
-    // For knockout stages, count advancing teams from previous stages
-    advancingTeamCount: stage.groups.reduce(
-      (sum, g) => sum + g.teamAssignments.length, 
-      0
-    ),
+    advancingTeamCount,
   }
 }
 

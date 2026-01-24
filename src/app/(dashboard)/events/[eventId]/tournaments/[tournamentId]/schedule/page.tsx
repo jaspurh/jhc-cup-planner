@@ -184,13 +184,13 @@ function MatchRow({ match, showPitch }: { match: ScheduledMatch; showPitch: bool
         </div>
 
         {/* Teams */}
-        <div className="flex items-center gap-2 min-w-[250px]">
-          <span className={`${match.homeTeam ? 'text-gray-900' : 'text-gray-400 italic'}`}>
-            {match.homeTeam?.teamName || 'TBD'}
+        <div className="flex items-center gap-2 min-w-[300px]">
+          <span className={`${match.homeTeam ? 'text-gray-900 font-medium' : 'text-gray-500 italic text-sm'}`}>
+            {match.homeTeam?.teamName || match.homeTeamSource || 'TBD'}
           </span>
           <span className="text-gray-400">vs</span>
-          <span className={`${match.awayTeam ? 'text-gray-900' : 'text-gray-400 italic'}`}>
-            {match.awayTeam?.teamName || 'TBD'}
+          <span className={`${match.awayTeam ? 'text-gray-900 font-medium' : 'text-gray-500 italic text-sm'}`}>
+            {match.awayTeam?.teamName || match.awayTeamSource || 'TBD'}
           </span>
         </div>
 

@@ -432,6 +432,10 @@ model Match {
   homeRegistrationId String?
   awayRegistrationId String?
   
+  // Team source labels (e.g., "Winner Group A", "2nd Group B") for TBD teams
+  homeTeamSource    String?
+  awayTeamSource    String?
+  
   // Match metadata
   matchNumber       Int?
   roundNumber       Int?

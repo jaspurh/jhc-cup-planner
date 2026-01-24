@@ -132,7 +132,7 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
     
     const stageConfig = template.hasGroups
       ? { numGroups: config.numGroups || 4, roundRobinType: config.roundRobinType || 'SINGLE' }
-      : { numMatches: config.numMatches || 4 }
+      : { advancingTeamCount: config.numMatches || 4 }
 
     const result = await createStage({
       name: config.name,
@@ -469,21 +469,20 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
           {selectedTemplate?.configType === 'knockout' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Number of Elimination Matches
+                Number of Teams Advancing
               </label>
               <select
                 value={numMatches}
                 onChange={(e) => setNumMatches(parseInt(e.target.value))}
                 className="border rounded-md px-3 py-2 text-gray-900 bg-white"
               >
-                <option value={1}>1 match</option>
-                <option value={2}>2 matches</option>
-                <option value={3}>3 matches</option>
-                <option value={4}>4 matches (Quarterfinals)</option>
-                <option value={8}>8 matches (Round of 16)</option>
+                <option value={2}>2 teams (Final only)</option>
+                <option value={4}>4 teams (Semifinals)</option>
+                <option value={8}>8 teams (Quarterfinals)</option>
+                <option value={16}>16 teams (Round of 16)</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                Single elimination - losers are out
+                Single elimination bracket - specify how many teams advance from previous stage
               </p>
             </div>
           )}

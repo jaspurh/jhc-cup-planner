@@ -244,6 +244,8 @@ async function saveMatches(matches: AllocatedMatch[]): Promise<void> {
         pitchId: match.pitchId,
         homeRegistrationId: match.homeRegistrationId,
         awayRegistrationId: match.awayRegistrationId,
+        homeTeamSource: match.metadata?.homeSource || null,
+        awayTeamSource: match.metadata?.awaySource || null,
         matchNumber: i + 1, // Sequential numbering
         roundNumber: match.roundNumber,
         bracketPosition: match.bracketPosition || null,
@@ -341,6 +343,8 @@ export async function getTournamentSchedule(
         id: m.awayTeam.id,
         teamName: m.awayTeam.registeredTeamName || m.awayTeam.team.name,
       } : null,
+      homeTeamSource: m.homeTeamSource,
+      awayTeamSource: m.awayTeamSource,
       result: m.result ? {
         homeScore: m.result.homeScore,
         awayScore: m.result.awayScore,

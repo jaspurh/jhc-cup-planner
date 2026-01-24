@@ -172,35 +172,40 @@ export function generateRoundRobinMatches(
 export function generateGSLMatches(
   teams: TeamSlot[],
   stageId: string,
-  groupId: string
+  groupId: string,
+  groupName?: string
 ): GeneratedMatch[] {
-  if (teams.length !== 4) {
-    throw new Error(`GSL format requires exactly 4 teams, got ${teams.length}`)
-  }
-
+  // GSL requires exactly 4 teams, but we can generate with placeholders if teams not yet assigned
+  const hasTeams = teams.length === 4
+  
   // Sort by seed position if available
-  const sortedTeams = [...teams].sort((a, b) => 
-    (a.seedPosition ?? 999) - (b.seedPosition ?? 999)
-  )
+  const sortedTeams = hasTeams 
+    ? [...teams].sort((a, b) => (a.seedPosition ?? 999) - (b.seedPosition ?? 999))
+    : []
 
-  const [teamA, teamB, teamC, teamD] = sortedTeams
+  const teamA = sortedTeams[0] || null
+  const teamB = sortedTeams[1] || null
+  const teamC = sortedTeams[2] || null
+  const teamD = sortedTeams[3] || null
+  
   const matches: GeneratedMatch[] = []
   const baseId = (pos: GSLMatchPosition) => `${stageId.slice(-6)}-${groupId.slice(-4)}-${pos}`
+  const groupLabel = groupName || 'Group'
 
   // M1: A vs B (Opening Match 1)
   matches.push({
     tempId: baseId('M1'),
     stageId,
     groupId,
-    homeRegistrationId: teamA.registrationId,
-    awayRegistrationId: teamB.registrationId,
+    homeRegistrationId: teamA?.registrationId || null,
+    awayRegistrationId: teamB?.registrationId || null,
     matchNumber: 1,
     roundNumber: 1,
     bracketPosition: 'M1',
     dependsOn: [],
     metadata: {
-      homeSource: `Seed 1`,
-      awaySource: `Seed 2`,
+      homeSource: hasTeams ? `Seed 1` : `${groupLabel} Slot 1`,
+      awaySource: hasTeams ? `Seed 2` : `${groupLabel} Slot 2`,
     },
   })
 
@@ -209,15 +214,15 @@ export function generateGSLMatches(
     tempId: baseId('M2'),
     stageId,
     groupId,
-    homeRegistrationId: teamC.registrationId,
-    awayRegistrationId: teamD.registrationId,
+    homeRegistrationId: teamC?.registrationId || null,
+    awayRegistrationId: teamD?.registrationId || null,
     matchNumber: 2,
     roundNumber: 1,
     bracketPosition: 'M2',
     dependsOn: [],
     metadata: {
-      homeSource: `Seed 3`,
-      awaySource: `Seed 4`,
+      homeSource: hasTeams ? `Seed 3` : `${groupLabel} Slot 3`,
+      awaySource: hasTeams ? `Seed 4` : `${groupLabel} Slot 4`,
     },
   })
 
@@ -637,7 +642,7 @@ export function generateStageMatches(stage: StageConfig): GeneratedMatch[] {
         throw new Error('GSL_GROUPS requires groups')
       }
       return stage.groups.flatMap(group =>
-        generateGSLMatches(group.teams, stage.stageId, group.groupId)
+        generateGSLMatches(group.teams, stage.stageId, group.groupId, group.groupName)
       )
 
     case 'ROUND_ROBIN':
