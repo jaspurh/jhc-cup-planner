@@ -66,6 +66,14 @@ const STAGE_TEMPLATES = [
     configType: 'groups',
   },
   {
+    type: 'GSL_GROUPS' as StageType,
+    label: 'GSL Groups',
+    description: 'Dual tournament format (4 teams, 5 matches per group)',
+    defaultName: 'GSL Group Stage',
+    hasGroups: true,
+    configType: 'gsl_groups',
+  },
+  {
     type: 'ROUND_ROBIN' as StageType,
     label: 'Round Robin',
     description: 'All teams in one pool play each other',
@@ -416,6 +424,27 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
             </div>
           )}
 
+          {/* GSL Groups specific */}
+          {selectedTemplate?.configType === 'gsl_groups' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Number of Groups
+              </label>
+              <select
+                value={numGroups}
+                onChange={(e) => setNumGroups(parseInt(e.target.value))}
+                className="border rounded-md px-3 py-2 text-gray-900 bg-white"
+              >
+                {[2, 3, 4, 5, 6, 7, 8].map(n => (
+                  <option key={n} value={n}>{n} groups</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                GSL format: 4 teams per group, 5 matches each. Total teams needed: {numGroups * 4}
+              </p>
+            </div>
+          )}
+
           {/* Round Robin (no groups) specific */}
           {selectedTemplate?.configType === 'roundrobin' && (
             <div>
@@ -573,12 +602,14 @@ function StageCard({
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <Badge variant={
                 stage.type === 'GROUP_STAGE' ? 'info' :
+                stage.type === 'GSL_GROUPS' ? 'info' :
                 stage.type === 'ROUND_ROBIN' ? 'info' :
                 stage.type === 'KNOCKOUT' ? 'warning' :
                 stage.type === 'DOUBLE_ELIMINATION' ? 'warning' :
                 'success'
               }>
                 {stage.type === 'GROUP_STAGE' ? 'Group Stage' :
+                 stage.type === 'GSL_GROUPS' ? 'GSL Groups' :
                  stage.type === 'ROUND_ROBIN' ? 'Round Robin' :
                  stage.type === 'KNOCKOUT' ? 'Knockout' :
                  stage.type === 'DOUBLE_ELIMINATION' ? 'Double Elim' :
@@ -597,7 +628,7 @@ function StageCard({
           </div>
         </div>
         <div className="flex gap-2">
-          {stage.type === 'GROUP_STAGE' && unassignedTeams.length > 0 && stage.groups.length > 0 && (
+          {(stage.type === 'GROUP_STAGE' || stage.type === 'GSL_GROUPS') && unassignedTeams.length > 0 && stage.groups.length > 0 && (
             <Button
               variant="secondary"
               size="sm"
@@ -620,7 +651,7 @@ function StageCard({
 
       {/* Stage Content */}
       <div className="p-4">
-        {stage.type === 'GROUP_STAGE' ? (
+        {(stage.type === 'GROUP_STAGE' || stage.type === 'GSL_GROUPS') ? (
           <div className="space-y-4">
             {/* Add Group */}
             <div className="flex gap-2">
