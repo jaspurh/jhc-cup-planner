@@ -218,6 +218,7 @@ model Stage {
 
 enum StageType {
   GROUP_STAGE         // Round-robin within groups
+  GSL_GROUPS          // GSL/Dual tournament format within groups (4 teams, 5 matches)
   KNOCKOUT            // Single elimination bracket
   DOUBLE_ELIMINATION  // Winners and losers brackets
   ROUND_ROBIN         // All teams play each other (no groups)
