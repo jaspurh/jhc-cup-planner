@@ -35,6 +35,9 @@ export function ScheduleGenerator({
   const [preview, setPreview] = useState<ScheduleStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [minimumRestMinutes, setMinimumRestMinutes] = useState(0)
+  const [preferredRestMinutes, setPreferredRestMinutes] = useState(0)
 
   const canGenerate = hasStages && hasPitches && hasTeams && hasStartTime
 
@@ -47,7 +50,11 @@ export function ScheduleGenerator({
   const handlePreview = () => {
     setError(null)
     startTransition(async () => {
-      const result = await previewTournamentSchedule({ tournamentId })
+      const result = await previewTournamentSchedule({ 
+        tournamentId,
+        minimumRestMinutes,
+        preferredRestMinutes,
+      })
       if (result.success && result.data) {
         setPreview(result.data)
         setShowConfirm(true)
@@ -60,7 +67,11 @@ export function ScheduleGenerator({
   const handleGenerate = () => {
     setError(null)
     startTransition(async () => {
-      const result = await generateTournamentSchedule({ tournamentId })
+      const result = await generateTournamentSchedule({ 
+        tournamentId,
+        minimumRestMinutes,
+        preferredRestMinutes,
+      })
       if (result.success) {
         setPreview(null)
         setShowConfirm(false)
@@ -167,7 +178,63 @@ export function ScheduleGenerator({
   }
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="space-y-3">
+      {/* Advanced Settings Toggle */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="text-sm text-blue-600 hover:text-blue-800 underline"
+        >
+          {showAdvanced ? 'Hide' : 'Show'} Rest Time Settings
+        </button>
+      </div>
+
+      {/* Advanced Settings Panel */}
+      {showAdvanced && (
+        <div className="bg-gray-50 rounded-lg p-4 border space-y-3">
+          <p className="text-sm text-gray-600 mb-2">
+            Configure minimum rest time between matches for the same team.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Minimum Rest (minutes)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="120"
+                value={minimumRestMinutes}
+                onChange={(e) => setMinimumRestMinutes(parseInt(e.target.value) || 0)}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Schedule will fail if this cannot be met
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Preferred Rest (minutes)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="120"
+                value={preferredRestMinutes}
+                onChange={(e) => setPreferredRestMinutes(parseInt(e.target.value) || 0)}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Shows warning if not met (schedule still generated)
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex items-center gap-3">
       {existingMatchCount > 0 ? (
         <>
           <Button
@@ -210,6 +277,7 @@ export function ScheduleGenerator({
       {error && (
         <span className="text-sm text-red-600">{error}</span>
       )}
+      </div>
     </div>
   )
 }

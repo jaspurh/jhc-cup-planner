@@ -61,7 +61,7 @@ export async function generateTournamentSchedule(
   input: GenerateScheduleInput
 ): Promise<ActionResult<ScheduleStats>> {
   try {
-    const { tournamentId, startTime, minimumRestMinutes = 15, preferredRestMinutes = 30 } = input
+    const { tournamentId, startTime, minimumRestMinutes = 0, preferredRestMinutes = 0 } = input
 
     // Fetch tournament with all needed relations
     const tournament = await db.tournament.findUnique({
@@ -443,7 +443,7 @@ export async function previewTournamentSchedule(
   input: GenerateScheduleInput
 ): Promise<ActionResult<ScheduleStats & { matchCount: number }>> {
   try {
-    const { tournamentId, startTime, minimumRestMinutes = 15, preferredRestMinutes = 30 } = input
+    const { tournamentId, startTime, minimumRestMinutes = 0, preferredRestMinutes = 0 } = input
 
     const tournament = await db.tournament.findUnique({
       where: { id: tournamentId },

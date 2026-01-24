@@ -11,18 +11,23 @@ export const stageTypeSchema = z.enum([
 ])
 export const roundRobinTypeSchema = z.enum(['SINGLE', 'DOUBLE'])
 
+// Group scheduling mode - how matches within a stage are ordered
+export const groupSchedulingModeSchema = z.enum(['sequential', 'interleaved']).default('interleaved')
+
 // Group stage configuration
 export const groupStageConfigSchema = z.object({
   numGroups: z.number().int().min(1).max(16),
   teamsPerGroup: z.number().int().min(2).max(8).optional(),
   roundRobinType: roundRobinTypeSchema.default('SINGLE'),
   advancingTeamsPerGroup: z.number().int().min(1).max(4).default(2),
+  groupSchedulingMode: groupSchedulingModeSchema.optional(),
 })
 
 // GSL groups configuration (4 teams per group, 5 matches each)
 export const gslGroupsConfigSchema = z.object({
   numGroups: z.number().int().min(1).max(8),
   advancingTeamsPerGroup: z.literal(2), // GSL always advances 2 teams
+  groupSchedulingMode: groupSchedulingModeSchema.optional(),
 })
 
 // Knockout stage configuration

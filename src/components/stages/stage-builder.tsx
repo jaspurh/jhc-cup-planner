@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import {
   createStage,
+  updateStage,
   deleteStage,
   createGroup,
   updateGroup,
@@ -182,6 +183,17 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
     }
   }
 
+  const handleUpdateStageConfig = async (stageId: string, newConfig: Record<string, unknown>) => {
+    setError(null)
+    const result = await updateStage(stageId, { configuration: newConfig })
+
+    if (result.success) {
+      refreshData()
+    } else {
+      setError(result.error || 'Failed to update stage configuration')
+    }
+  }
+
   const handleAddGroup = async (stageId: string, groupName: string) => {
     setError(null)
     const result = await createGroup({ name: groupName, stageId })
@@ -318,6 +330,7 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
                 onAssignTeam={handleAssignTeam}
                 onRemoveTeam={handleRemoveTeam}
                 onAutoDistribute={handleAutoDistribute}
+                onUpdateStageConfig={handleUpdateStageConfig}
               />
             ))}
           </div>
@@ -629,7 +642,8 @@ function StageCard({
   onAssignTeam,
   onRemoveTeam,
   onAutoDistribute,
-}: StageCardProps) {
+  onUpdateStageConfig,
+}: StageCardProps & { onUpdateStageConfig: (stageId: string, config: Record<string, unknown>) => void }) {
   const [newGroupName, setNewGroupName] = useState('')
 
   const handleAddGroup = () => {
@@ -638,7 +652,7 @@ function StageCard({
     setNewGroupName('')
   }
 
-  const config = stage.configuration as { numGroups?: number; roundRobinType?: string; numMatches?: number } | null
+  const config = stage.configuration as { numGroups?: number; roundRobinType?: string; numMatches?: number; groupSchedulingMode?: string; hasThirdPlace?: boolean } | null
 
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -672,6 +686,9 @@ function StageCard({
               {config?.roundRobinType && (
                 <span>• {config.roundRobinType.toLowerCase()} round-robin</span>
               )}
+              {config?.groupSchedulingMode && (
+                <span>• {config.groupSchedulingMode} scheduling</span>
+              )}
               {stage._count.matches > 0 && (
                 <span>• {stage._count.matches} matches</span>
               )}
@@ -704,6 +721,39 @@ function StageCard({
       <div className="p-4">
         {(stage.type === 'GROUP_STAGE' || stage.type === 'GSL_GROUPS') ? (
           <div className="space-y-4">
+            {/* Stage Settings */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-300 shadow-sm">
+              <div className="flex flex-wrap gap-6 items-center">
+                <div className="flex items-center gap-3">
+                  <label className="text-gray-800 font-semibold whitespace-nowrap">Match Order:</label>
+                  <select
+                    value={config?.groupSchedulingMode || 'interleaved'}
+                    onChange={(e) => onUpdateStageConfig(stage.id, { 
+                      ...config, 
+                      groupSchedulingMode: e.target.value 
+                    })}
+                    disabled={isPending || stage._count.matches > 0}
+                    className="border-2 border-blue-400 rounded-lg px-4 py-2 text-sm bg-white font-semibold text-gray-900 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="sequential">Sequential (all Group A, then B...)</option>
+                    <option value="interleaved">Interleaved (alternate groups)</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-gray-600">Buffer Time:</span>
+                  <span className="font-bold text-gray-900 bg-white px-2 py-1 rounded border">
+                    {stage.bufferTimeMinutes} min
+                  </span>
+                  {config?.groupSchedulingMode === 'sequential' && stage.bufferTimeMinutes > 0 && (
+                    <span className="text-blue-600 text-xs">(added between groups)</span>
+                  )}
+                </div>
+              </div>
+              {stage._count.matches > 0 && (
+                <p className="text-xs text-gray-500 mt-2">Clear the schedule to change these settings</p>
+              )}
+            </div>
+
             {/* Add Group */}
             <div className="flex gap-2">
               <Input

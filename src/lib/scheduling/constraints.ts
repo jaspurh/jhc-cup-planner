@@ -51,10 +51,12 @@ function teamPlaysInMatch(teamId: string, match: AllocatedMatch): boolean {
 
 /**
  * Validate rest times for all teams
+ * @param teamNames - Optional map of registration ID to team name for friendly error messages
  */
 export function validateRestTimes(
   matches: AllocatedMatch[],
-  config: RestTimeConfig = DEFAULT_REST_TIME
+  config: RestTimeConfig = DEFAULT_REST_TIME,
+  teamNames?: Map<string, string>
 ): ConstraintViolation[] {
   const violations: ConstraintViolation[] = []
 
@@ -64,6 +66,9 @@ export function validateRestTimes(
     if (match.homeRegistrationId) teamIds.add(match.homeRegistrationId)
     if (match.awayRegistrationId) teamIds.add(match.awayRegistrationId)
   }
+
+  // Helper to get team display name
+  const getTeamName = (id: string) => teamNames?.get(id) || id
 
   // Check rest times for each team
   for (const teamId of teamIds) {
@@ -82,7 +87,7 @@ export function validateRestTimes(
         violations.push({
           type: 'REST_TIME',
           severity: 'error',
-          message: `Team ${teamId} has only ${restTime} minutes rest between matches (minimum: ${config.minimumRestMinutes})`,
+          message: `Team "${getTeamName(teamId)}" has only ${restTime} minutes rest between matches (minimum: ${config.minimumRestMinutes})`,
           matchId: next.tempId,
           details: {
             teamId,
@@ -96,7 +101,7 @@ export function validateRestTimes(
         violations.push({
           type: 'REST_TIME',
           severity: 'warning',
-          message: `Team ${teamId} has only ${restTime} minutes rest between matches (preferred: ${config.preferredRestMinutes})`,
+          message: `Team "${getTeamName(teamId)}" has only ${restTime} minutes rest between matches (preferred: ${config.preferredRestMinutes})`,
           matchId: next.tempId,
           details: {
             teamId,
@@ -266,6 +271,8 @@ export function validateMissingTeams(matches: AllocatedMatch[]): ConstraintViola
 export interface ValidationOptions {
   restTime?: RestTimeConfig
   validateMissingTeams?: boolean
+  /** Map of registration ID to team name for friendly error messages */
+  teamNames?: Map<string, string>
 }
 
 /**
@@ -278,7 +285,7 @@ export function validateSchedule(
   const allViolations: ConstraintViolation[] = []
 
   // Rest time validation
-  const restViolations = validateRestTimes(matches, options.restTime || DEFAULT_REST_TIME)
+  const restViolations = validateRestTimes(matches, options.restTime || DEFAULT_REST_TIME, options.teamNames)
   allViolations.push(...restViolations)
 
   // Dependency validation

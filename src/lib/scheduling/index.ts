@@ -86,11 +86,26 @@ export function generateSchedule(input: ScheduleGenerationInput): ScheduleGenera
     }
   }
 
+  // Build team names map for friendly error messages
+  const teamNames = new Map<string, string>()
+  for (const stage of stages) {
+    if (stage.groups) {
+      for (const group of stage.groups) {
+        for (const team of group.teams) {
+          if (team.registrationId && team.teamName) {
+            teamNames.set(team.registrationId, team.teamName)
+          }
+        }
+      }
+    }
+  }
+
   // Step 3: Validate constraints
   const validationResult = validateSchedule(allocationResult.matches, {
     restTime: constraints?.restTime,
     // Don't validate missing teams for knockout matches
     validateMissingTeams: false,
+    teamNames,
   })
 
   // Separate warnings and errors
@@ -251,6 +266,7 @@ export function dbStageToConfig(
     groups: stage.groups.map(group => ({
       groupId: group.id,
       groupName: group.name,
+      groupOrder: group.order,
       roundRobinType: group.roundRobinType,
       teams: group.teamAssignments.map(ta => ({
         registrationId: ta.registrationId,

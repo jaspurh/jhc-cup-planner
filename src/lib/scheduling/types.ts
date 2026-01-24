@@ -43,6 +43,8 @@ export interface GeneratedMatch {
     bracketType?: 'winners' | 'losers' | 'grand_final'
     /** Is this a 3rd place match? */
     isThirdPlace?: boolean
+    /** Group order for sequential scheduling */
+    groupOrder?: number
   }
 }
 
@@ -61,6 +63,7 @@ export interface TeamSlot {
 export interface GroupConfig {
   groupId: string
   groupName: string
+  groupOrder: number
   teams: TeamSlot[]
   roundRobinType: RoundRobinType
 }

@@ -100,11 +100,11 @@ function sortByPriority(
 ): GeneratedMatch[] {
   return [...matches].sort((a, b) => {
     if (groupSchedulingMode === 'sequential') {
-      // Sequential mode: group all matches by groupId first
-      const aGroup = a.groupId || ''
-      const bGroup = b.groupId || ''
-      if (aGroup !== bGroup) {
-        return aGroup.localeCompare(bGroup)
+      // Sequential mode: sort by groupOrder first (all Group A matches, then Group B, etc.)
+      const aGroupOrder = a.metadata?.groupOrder ?? 999
+      const bGroupOrder = b.metadata?.groupOrder ?? 999
+      if (aGroupOrder !== bGroupOrder) {
+        return aGroupOrder - bGroupOrder
       }
     }
     
@@ -113,13 +113,12 @@ function sortByPriority(
       return a.roundNumber - b.roundNumber
     }
     
-    // For interleaved mode within same round, sort by group to spread them out
+    // For interleaved mode within same round, sort by group order to spread them out
     if (groupSchedulingMode === 'interleaved') {
-      const aGroup = a.groupId || ''
-      const bGroup = b.groupId || ''
-      if (aGroup !== bGroup) {
-        // Interleave by alternating groups
-        return aGroup.localeCompare(bGroup)
+      const aGroupOrder = a.metadata?.groupOrder ?? 999
+      const bGroupOrder = b.metadata?.groupOrder ?? 999
+      if (aGroupOrder !== bGroupOrder) {
+        return aGroupOrder - bGroupOrder
       }
     }
     
@@ -234,6 +233,8 @@ export function allocateTimeSlots(
     // Sort matches by priority, respecting group scheduling mode
     const groupSchedulingMode = stage.groupSchedulingMode || 'interleaved'
     const sortedMatches = sortByPriority(stageMatches, groupSchedulingMode)
+    
+    console.log(`[Buffer Debug] Stage "${stage.stageName}": groupSchedulingMode=${groupSchedulingMode}, bufferTimeMinutes=${stage.bufferTimeMinutes}, numMatches=${sortedMatches.length}`)
 
     // Track current group for gap insertion in sequential mode
     let currentGroupId: string | undefined = undefined
@@ -258,7 +259,9 @@ export function allocateTimeSlots(
               latestGroupEnd = allocated.scheduledEndTime
             }
           }
+          const oldGroupStart = groupStartTime
           groupStartTime = new Date(latestGroupEnd.getTime() + stage.bufferTimeMinutes * 60000)
+          console.log(`[Buffer Debug] Switching from group ${currentGroupId.slice(-6)} to ${match.groupId.slice(-6)}: bufferMinutes=${stage.bufferTimeMinutes}, latestGroupEnd=${latestGroupEnd.toISOString()}, newGroupStart=${groupStartTime.toISOString()}`)
         }
         currentGroupId = match.groupId
       }
