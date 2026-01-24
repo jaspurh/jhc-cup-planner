@@ -676,6 +676,7 @@ function StageCard({
                   <GroupCard
                     key={group.id}
                     group={group}
+                    stageType={stage.type}
                     unassignedTeams={unassignedTeams}
                     isPending={isPending}
                     onUpdateRoundRobin={onUpdateGroupRoundRobin}
@@ -701,6 +702,7 @@ function StageCard({
 // Group Card Component
 interface GroupCardProps {
   group: StageWithGroups['groups'][0]
+  stageType: StageType
   unassignedTeams: TeamRegistration[]
   isPending: boolean
   onUpdateRoundRobin: (groupId: string, roundRobinType: 'SINGLE' | 'DOUBLE') => void
@@ -711,6 +713,7 @@ interface GroupCardProps {
 
 function GroupCard({
   group,
+  stageType,
   unassignedTeams,
   isPending,
   onUpdateRoundRobin,
@@ -740,16 +743,21 @@ function GroupCard({
             ×
           </button>
         </div>
-        {/* Round-robin type selector */}
-        <select
-          value={group.roundRobinType}
-          onChange={(e) => onUpdateRoundRobin(group.id, e.target.value as 'SINGLE' | 'DOUBLE')}
-          disabled={isPending}
-          className="mt-1 w-full text-xs border rounded px-1 py-0.5 text-gray-700 bg-white"
-        >
-          <option value="SINGLE">Single RR</option>
-          <option value="DOUBLE">Double RR</option>
-        </select>
+        {/* Round-robin type selector - only for GROUP_STAGE, not GSL */}
+        {stageType === 'GROUP_STAGE' && (
+          <select
+            value={group.roundRobinType}
+            onChange={(e) => onUpdateRoundRobin(group.id, e.target.value as 'SINGLE' | 'DOUBLE')}
+            disabled={isPending}
+            className="mt-1 w-full text-xs border rounded px-1 py-0.5 text-gray-700 bg-white"
+          >
+            <option value="SINGLE">Single RR</option>
+            <option value="DOUBLE">Double RR</option>
+          </select>
+        )}
+        {stageType === 'GSL_GROUPS' && (
+          <p className="mt-1 text-xs text-gray-500">5 matches (dual tournament)</p>
+        )}
       </div>
 
       <div className="p-3 space-y-2">

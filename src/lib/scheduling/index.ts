@@ -14,6 +14,7 @@ import {
   ScheduleGenerationInput,
   ScheduleGenerationResult,
   ConstraintViolation,
+  StageConfig,
 } from './types'
 import { generateAllMatches } from './matchGeneration'
 import { 
