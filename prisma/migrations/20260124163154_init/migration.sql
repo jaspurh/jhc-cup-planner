@@ -1,5 +1,11 @@
 -- CreateEnum
+CREATE TYPE "PlatformRole" AS ENUM ('USER', 'SUPPORT', 'ADMIN');
+
+-- CreateEnum
 CREATE TYPE "EventStatus" AS ENUM ('DRAFT', 'PUBLISHED', 'ACTIVE', 'COMPLETED', 'ARCHIVED');
+
+-- CreateEnum
+CREATE TYPE "RegistrationMode" AS ENUM ('OPEN', 'INVITE_ONLY', 'CLUB_ADMIN', 'CLUB_MEMBERS');
 
 -- CreateEnum
 CREATE TYPE "TournamentStatus" AS ENUM ('DRAFT', 'READY', 'ACTIVE', 'COMPLETED', 'ARCHIVED');
@@ -11,10 +17,13 @@ CREATE TYPE "TournamentStyle" AS ENUM ('COMPETITIVE', 'RECREATIONAL');
 CREATE TYPE "TournamentFormat" AS ENUM ('GROUP_STAGE', 'KNOCKOUT', 'DOUBLE_ELIMINATION', 'GROUP_KNOCKOUT', 'ROUND_ROBIN');
 
 -- CreateEnum
-CREATE TYPE "StageType" AS ENUM ('GROUP_STAGE', 'KNOCKOUT', 'FINAL');
+CREATE TYPE "StageType" AS ENUM ('GROUP_STAGE', 'GSL_GROUPS', 'KNOCKOUT', 'DOUBLE_ELIMINATION', 'ROUND_ROBIN', 'FINAL');
 
 -- CreateEnum
 CREATE TYPE "RoundRobinType" AS ENUM ('SINGLE', 'DOUBLE');
+
+-- CreateEnum
+CREATE TYPE "ClubStatus" AS ENUM ('ACTIVE', 'INACTIVE');
 
 -- CreateEnum
 CREATE TYPE "TeamMemberRole" AS ENUM ('CAPTAIN', 'COACH', 'PLAYER');
@@ -39,6 +48,7 @@ CREATE TABLE "User" (
     "emailVerified" TIMESTAMP(3),
     "image" TEXT,
     "passwordHash" TEXT,
+    "platformRole" "PlatformRole" NOT NULL DEFAULT 'USER',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -92,6 +102,10 @@ CREATE TABLE "Event" (
     "ownerId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "logoUrl" TEXT,
+    "primaryColor" TEXT,
+    "secondaryColor" TEXT,
+    "accentColor" TEXT,
 
     CONSTRAINT "Event_pkey" PRIMARY KEY ("id")
 );
@@ -106,6 +120,7 @@ CREATE TABLE "Tournament" (
     "status" "TournamentStatus" NOT NULL DEFAULT 'DRAFT',
     "style" "TournamentStyle" NOT NULL DEFAULT 'COMPETITIVE',
     "format" "TournamentFormat" NOT NULL DEFAULT 'GROUP_KNOCKOUT',
+    "registrationMode" "RegistrationMode" NOT NULL DEFAULT 'OPEN',
     "matchDurationMinutes" INTEGER NOT NULL DEFAULT 5,
     "transitionTimeMinutes" INTEGER NOT NULL DEFAULT 1,
     "startTime" TIMESTAMP(3),
@@ -177,6 +192,33 @@ CREATE TABLE "GroupStanding" (
 );
 
 -- CreateTable
+CREATE TABLE "Club" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "fullName" TEXT,
+    "country" TEXT,
+    "region" TEXT,
+    "logoUrl" TEXT,
+    "primaryColor" TEXT,
+    "secondaryColor" TEXT,
+    "status" "ClubStatus" NOT NULL DEFAULT 'ACTIVE',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Club_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ClubAdmin" (
+    "id" TEXT NOT NULL,
+    "clubId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ClubAdmin_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Team" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -184,6 +226,8 @@ CREATE TABLE "Team" (
     "contactEmail" TEXT,
     "contactPhone" TEXT,
     "createdById" TEXT,
+    "primaryClubId" TEXT,
+    "secondaryClubId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -222,6 +266,8 @@ CREATE TABLE "Match" (
     "pitchId" TEXT,
     "homeRegistrationId" TEXT,
     "awayRegistrationId" TEXT,
+    "homeTeamSource" TEXT,
+    "awayTeamSource" TEXT,
     "matchNumber" INTEGER,
     "roundNumber" INTEGER,
     "bracketPosition" TEXT,
@@ -268,12 +314,24 @@ CREATE TABLE "Pitch" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "venueId" TEXT,
-    "tournamentId" TEXT NOT NULL,
+    "eventId" TEXT NOT NULL,
     "capacity" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Pitch_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "TournamentPitch" (
+    "id" TEXT NOT NULL,
+    "tournamentId" TEXT NOT NULL,
+    "pitchId" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "displayOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "TournamentPitch_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -383,7 +441,28 @@ CREATE INDEX "GroupStanding_groupId_idx" ON "GroupStanding"("groupId");
 CREATE UNIQUE INDEX "GroupStanding_groupId_registrationId_key" ON "GroupStanding"("groupId", "registrationId");
 
 -- CreateIndex
+CREATE INDEX "Club_name_idx" ON "Club"("name");
+
+-- CreateIndex
+CREATE INDEX "Club_status_idx" ON "Club"("status");
+
+-- CreateIndex
+CREATE INDEX "ClubAdmin_clubId_idx" ON "ClubAdmin"("clubId");
+
+-- CreateIndex
+CREATE INDEX "ClubAdmin_userId_idx" ON "ClubAdmin"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ClubAdmin_clubId_userId_key" ON "ClubAdmin"("clubId", "userId");
+
+-- CreateIndex
 CREATE INDEX "Team_createdById_idx" ON "Team"("createdById");
+
+-- CreateIndex
+CREATE INDEX "Team_primaryClubId_idx" ON "Team"("primaryClubId");
+
+-- CreateIndex
+CREATE INDEX "Team_secondaryClubId_idx" ON "Team"("secondaryClubId");
 
 -- CreateIndex
 CREATE INDEX "TeamMember_teamId_idx" ON "TeamMember"("teamId");
@@ -422,10 +501,22 @@ CREATE UNIQUE INDEX "MatchResult_matchId_key" ON "MatchResult"("matchId");
 CREATE INDEX "Venue_eventId_idx" ON "Venue"("eventId");
 
 -- CreateIndex
-CREATE INDEX "Pitch_tournamentId_idx" ON "Pitch"("tournamentId");
+CREATE INDEX "Pitch_eventId_idx" ON "Pitch"("eventId");
 
 -- CreateIndex
 CREATE INDEX "Pitch_venueId_idx" ON "Pitch"("venueId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Pitch_eventId_name_key" ON "Pitch"("eventId", "name");
+
+-- CreateIndex
+CREATE INDEX "TournamentPitch_tournamentId_idx" ON "TournamentPitch"("tournamentId");
+
+-- CreateIndex
+CREATE INDEX "TournamentPitch_pitchId_idx" ON "TournamentPitch"("pitchId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "TournamentPitch_tournamentId_pitchId_key" ON "TournamentPitch"("tournamentId", "pitchId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Invitation_token_key" ON "Invitation"("token");
@@ -491,7 +582,19 @@ ALTER TABLE "GroupStanding" ADD CONSTRAINT "GroupStanding_groupId_fkey" FOREIGN 
 ALTER TABLE "GroupStanding" ADD CONSTRAINT "GroupStanding_registrationId_fkey" FOREIGN KEY ("registrationId") REFERENCES "TeamRegistration"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "ClubAdmin" ADD CONSTRAINT "ClubAdmin_clubId_fkey" FOREIGN KEY ("clubId") REFERENCES "Club"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ClubAdmin" ADD CONSTRAINT "ClubAdmin_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "Team" ADD CONSTRAINT "Team_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Team" ADD CONSTRAINT "Team_primaryClubId_fkey" FOREIGN KEY ("primaryClubId") REFERENCES "Club"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Team" ADD CONSTRAINT "Team_secondaryClubId_fkey" FOREIGN KEY ("secondaryClubId") REFERENCES "Club"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "TeamMember" ADD CONSTRAINT "TeamMember_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -530,7 +633,13 @@ ALTER TABLE "Venue" ADD CONSTRAINT "Venue_eventId_fkey" FOREIGN KEY ("eventId") 
 ALTER TABLE "Pitch" ADD CONSTRAINT "Pitch_venueId_fkey" FOREIGN KEY ("venueId") REFERENCES "Venue"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Pitch" ADD CONSTRAINT "Pitch_tournamentId_fkey" FOREIGN KEY ("tournamentId") REFERENCES "Tournament"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Pitch" ADD CONSTRAINT "Pitch_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "Event"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TournamentPitch" ADD CONSTRAINT "TournamentPitch_tournamentId_fkey" FOREIGN KEY ("tournamentId") REFERENCES "Tournament"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TournamentPitch" ADD CONSTRAINT "TournamentPitch_pitchId_fkey" FOREIGN KEY ("pitchId") REFERENCES "Pitch"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Invitation" ADD CONSTRAINT "Invitation_tournamentId_fkey" FOREIGN KEY ("tournamentId") REFERENCES "Tournament"("id") ON DELETE CASCADE ON UPDATE CASCADE;
