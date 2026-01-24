@@ -14,6 +14,7 @@ import {
   TeamSlot,
   StageConfig,
   GSLMatchPosition,
+  IncomingTeamSlot,
 } from './types'
 
 // ==========================================
@@ -290,19 +291,29 @@ export function generateGSLMatches(
  * 
  * @param teamCount - Number of teams in the bracket
  * @param stageId - Stage ID
- * @param seedOrder - Optional seed order for matchups
+ * @param seedOrder - Optional seed order for matchups (legacy, use incomingTeams instead)
+ * @param incomingTeams - Teams coming from previous stages with source labels
  * @returns Array of generated matches
  */
 export function generateKnockoutMatches(
   teamCount: number,
   stageId: string,
-  seedOrder?: string[]
+  seedOrder?: string[],
+  incomingTeams?: IncomingTeamSlot[]
 ): GeneratedMatch[] {
   const matches: GeneratedMatch[] = []
   
   // Calculate bracket size (must be power of 2)
   const bracketSize = Math.pow(2, Math.ceil(Math.log2(teamCount)))
   const numRounds = Math.log2(bracketSize)
+
+  // Build a map of seed -> source info
+  const seedSourceMap = new Map<number, IncomingTeamSlot>()
+  if (incomingTeams) {
+    for (const team of incomingTeams) {
+      seedSourceMap.set(team.seedPosition, team)
+    }
+  }
 
   // Generate round names
   const roundNames: Record<number, string> = {
@@ -341,10 +352,20 @@ export function generateKnockoutMatches(
     const bracketPos = `${roundName}${i + 1}`
     const tempId = `${stageId.slice(-6)}-${bracketPos}`
 
-    // Determine if this match has a bye
-    const homeId = seed1 <= teamCount ? (seedOrder?.[seed1 - 1] ?? null) : null
-    const awayId = seed2 <= teamCount ? (seedOrder?.[seed2 - 1] ?? null) : null
-    const isBye = homeId === null || awayId === null
+    // Get team info from incoming teams or seed order
+    const homeIncoming = seedSourceMap.get(seed1)
+    const awayIncoming = seedSourceMap.get(seed2)
+    
+    // Determine registration IDs (from incoming teams, seed order, or null)
+    const homeId = homeIncoming?.registrationId ?? (seed1 <= teamCount ? (seedOrder?.[seed1 - 1] ?? null) : null)
+    const awayId = awayIncoming?.registrationId ?? (seed2 <= teamCount ? (seedOrder?.[seed2 - 1] ?? null) : null)
+    
+    // Determine source labels
+    const homeSource = homeIncoming?.sourceLabel ?? `Seed ${seed1}`
+    const awaySource = awayIncoming?.sourceLabel ?? `Seed ${seed2}`
+    
+    // Only skip if BOTH teams are truly missing (byes for bracket padding)
+    const isBye = seed1 > teamCount && seed2 > teamCount
 
     if (!isBye) {
       const match: GeneratedMatch = {
@@ -358,8 +379,8 @@ export function generateKnockoutMatches(
         bracketPosition: bracketPos,
         dependsOn: [],
         metadata: {
-          homeSource: `Seed ${seed1}`,
-          awaySource: `Seed ${seed2}`,
+          homeSource,
+          awaySource,
         },
       }
       matches.push(match)
@@ -653,29 +674,54 @@ export function generateStageMatches(stage: StageConfig): GeneratedMatch[] {
 
     case 'KNOCKOUT':
       const knockoutTeamCount = stage.advancingTeamCount || 0
-      return generateKnockoutMatches(knockoutTeamCount, stage.stageId)
+      return generateKnockoutMatches(knockoutTeamCount, stage.stageId, undefined, stage.incomingTeams)
 
     case 'DOUBLE_ELIMINATION':
       const deTeamCount = stage.advancingTeamCount || 0
       return generateDoubleEliminationMatches(deTeamCount, stage.stageId)
 
     case 'FINAL':
-      // Finals stage - typically just one match
-      return [{
+      // Finals stage - get source labels from incoming teams or use defaults
+      const finalist1 = stage.incomingTeams?.find(t => t.seedPosition === 1)
+      const finalist2 = stage.incomingTeams?.find(t => t.seedPosition === 2)
+      const matches: GeneratedMatch[] = [{
         tempId: `${stage.stageId.slice(-6)}-F`,
         stageId: stage.stageId,
         groupId: undefined,
-        homeRegistrationId: null,
-        awayRegistrationId: null,
+        homeRegistrationId: finalist1?.registrationId ?? null,
+        awayRegistrationId: finalist2?.registrationId ?? null,
         matchNumber: 1,
         roundNumber: 1,
         bracketPosition: 'F',
         dependsOn: [],
         metadata: {
-          homeSource: 'Finalist 1',
-          awaySource: 'Finalist 2',
+          homeSource: finalist1?.sourceLabel ?? 'Finalist 1',
+          awaySource: finalist2?.sourceLabel ?? 'Finalist 2',
         },
       }]
+      
+      // Check if there's a 3rd place match
+      const hasThirdPlace = (stage.customConfig as { hasThirdPlace?: boolean })?.hasThirdPlace
+      if (hasThirdPlace) {
+        const thirdPlace1 = stage.incomingTeams?.find(t => t.seedPosition === 3)
+        const thirdPlace2 = stage.incomingTeams?.find(t => t.seedPosition === 4)
+        matches.push({
+          tempId: `${stage.stageId.slice(-6)}-3P`,
+          stageId: stage.stageId,
+          groupId: undefined,
+          homeRegistrationId: thirdPlace1?.registrationId ?? null,
+          awayRegistrationId: thirdPlace2?.registrationId ?? null,
+          matchNumber: 2,
+          roundNumber: 1,
+          bracketPosition: '3P',
+          dependsOn: [],
+          metadata: {
+            homeSource: thirdPlace1?.sourceLabel ?? '3rd Place Contender 1',
+            awaySource: thirdPlace2?.sourceLabel ?? '3rd Place Contender 2',
+          },
+        })
+      }
+      return matches
 
     default:
       throw new Error(`Unknown stage type: ${stage.type}`)

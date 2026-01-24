@@ -64,6 +64,23 @@ export interface GroupConfig {
 }
 
 /**
+ * Represents a team slot that feeds into a knockout stage from a previous stage
+ */
+export interface IncomingTeamSlot {
+  /** Seed position in the knockout (1 = top seed) */
+  seedPosition: number
+  /** Source label (e.g., "Group A 1st", "GSL Group B Winner") */
+  sourceLabel: string
+  /** Registration ID if known, null if TBD */
+  registrationId: string | null
+}
+
+/**
+ * Group scheduling mode
+ */
+export type GroupSchedulingMode = 'interleaved' | 'sequential'
+
+/**
  * Stage configuration for match generation
  */
 export interface StageConfig {
@@ -71,12 +88,16 @@ export interface StageConfig {
   stageName: string
   type: StageType
   order: number
-  gapMinutesBefore: number
+  bufferTimeMinutes: number
   groups?: GroupConfig[]
   /** Number of teams advancing from previous stage (for knockout) */
   advancingTeamCount?: number
+  /** Incoming teams from previous stages (for knockout/finals) */
+  incomingTeams?: IncomingTeamSlot[]
   /** Custom configuration from stage.configuration JSON */
   customConfig?: Record<string, unknown>
+  /** How to schedule group matches: 'sequential' = all Group A, then Group B, etc; 'interleaved' = round-robin across groups */
+  groupSchedulingMode?: GroupSchedulingMode
 }
 
 // ==========================================

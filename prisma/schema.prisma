@@ -196,7 +196,7 @@ model Stage {
   tournamentId       String
   type               StageType
   order              Int
-  gapMinutesBefore   Int       @default(0)
+  bufferTimeMinutes  Int       @default(0)
   
   // Stage configuration (JSON for flexibility)
   configuration      Json?

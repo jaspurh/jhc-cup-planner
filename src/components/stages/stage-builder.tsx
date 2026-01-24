@@ -32,7 +32,7 @@ interface StageWithGroups {
   name: string
   type: StageType
   order: number
-  gapMinutesBefore: number
+  bufferTimeMinutes: number
   configuration: unknown
   groups: Array<Group & {
     roundRobinType: 'SINGLE' | 'DOUBLE'
@@ -123,22 +123,27 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
 
   const handleAddStage = async (template: typeof STAGE_TEMPLATES[0], config: {
     name: string
-    gapMinutesBefore: number
+    bufferTimeMinutes: number
     numGroups?: number
     roundRobinType?: 'SINGLE' | 'DOUBLE'
     numMatches?: number
+    groupSchedulingMode?: 'sequential' | 'interleaved'
   }) => {
     setError(null)
     
     const stageConfig = template.hasGroups
-      ? { numGroups: config.numGroups || 4, roundRobinType: config.roundRobinType || 'SINGLE' }
+      ? { 
+          numGroups: config.numGroups || 4, 
+          roundRobinType: config.roundRobinType || 'SINGLE',
+          groupSchedulingMode: config.groupSchedulingMode || 'sequential',
+        }
       : { advancingTeamCount: config.numMatches || 4 }
 
     const result = await createStage({
       name: config.name,
       tournamentId,
       type: template.type,
-      gapMinutesBefore: config.gapMinutesBefore,
+      bufferTimeMinutes: config.bufferTimeMinutes,
       configuration: stageConfig,
     })
 
@@ -322,10 +327,11 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
 interface AddStageFormProps {
   onAdd: (template: typeof STAGE_TEMPLATES[0], config: {
     name: string
-    gapMinutesBefore: number
+    bufferTimeMinutes: number
     numGroups?: number
     roundRobinType?: 'SINGLE' | 'DOUBLE'
     numMatches?: number
+    groupSchedulingMode?: 'sequential' | 'interleaved'
   }) => void
   onCancel: () => void
   isPending: boolean
@@ -338,6 +344,7 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
   const [numGroups, setNumGroups] = useState(4)
   const [roundRobinType, setRoundRobinType] = useState<'SINGLE' | 'DOUBLE'>('SINGLE')
   const [numMatches, setNumMatches] = useState(4)
+  const [groupSchedulingMode, setGroupSchedulingMode] = useState<'sequential' | 'interleaved'>('sequential')
 
   const selectedTemplate = STAGE_TEMPLATES.find(t => t.type === selectedType)
 
@@ -345,10 +352,11 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
     if (!selectedTemplate || !name.trim()) return
     onAdd(selectedTemplate, {
       name: name.trim(),
-      gapMinutesBefore: gapMinutes,
+      bufferTimeMinutes: gapMinutes,
       numGroups: selectedTemplate.hasGroups ? numGroups : undefined,
       roundRobinType: selectedTemplate.hasGroups ? roundRobinType : undefined,
       numMatches: !selectedTemplate.hasGroups ? numMatches : undefined,
+      groupSchedulingMode: selectedTemplate.hasGroups ? groupSchedulingMode : undefined,
     })
   }
 
@@ -388,7 +396,7 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
           {/* Gap Minutes */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Gap Before Stage (minutes)
+              Buffer Time (minutes)
             </label>
             <Input
               type="number"
@@ -399,7 +407,7 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
               className="w-32"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Time gap after previous stage ends before this stage starts
+              Extra time for this stage/group (injuries, introductions, unforeseen delays)
             </p>
           </div>
 
@@ -441,6 +449,26 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 GSL format: 4 teams per group, 5 matches each. Total teams needed: {numGroups * 4}
+              </p>
+            </div>
+          )}
+
+          {/* Group Scheduling Mode (for any stage with groups) */}
+          {selectedTemplate?.hasGroups && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Match Scheduling Order
+              </label>
+              <select
+                value={groupSchedulingMode}
+                onChange={(e) => setGroupSchedulingMode(e.target.value as 'sequential' | 'interleaved')}
+                className="border rounded-md px-3 py-2 text-gray-900 bg-white"
+              >
+                <option value="sequential">Sequential (all Group A, then Group B, etc.)</option>
+                <option value="interleaved">Interleaved (alternate between groups)</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Sequential is recommended when groups are separated by location or referee availability
               </p>
             </div>
           )}
@@ -614,8 +642,8 @@ function StageCard({
                  stage.type === 'DOUBLE_ELIMINATION' ? 'Double Elim' :
                  'Finals'}
               </Badge>
-              {stage.gapMinutesBefore > 0 && (
-                <span>• {stage.gapMinutesBefore} min gap before</span>
+              {stage.bufferTimeMinutes > 0 && (
+                <span>• {stage.bufferTimeMinutes} min buffer</span>
               )}
               {config?.roundRobinType && (
                 <span>• {config.roundRobinType.toLowerCase()} round-robin</span>

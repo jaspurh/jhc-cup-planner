@@ -59,7 +59,7 @@ export const createStageSchema = z.object({
   tournamentId: z.cuid(),
   type: stageTypeSchema,
   order: z.number().int().min(1),
-  gapMinutesBefore: z.number().int().min(0).max(120).default(0),
+  bufferTimeMinutes: z.number().int().min(0).max(120).default(0),
   configuration: stageConfigurationSchema.optional(),
 })
 
@@ -69,7 +69,7 @@ export type CreateStageInput = z.infer<typeof createStageSchema>
 export const updateStageSchema = z.object({
   name: z.string().min(1).max(50).optional(),
   order: z.number().int().min(1).optional(),
-  gapMinutesBefore: z.number().int().min(0).max(120).optional(),
+  bufferTimeMinutes: z.number().int().min(0).max(120).optional(),
   configuration: stageConfigurationSchema.optional(),
 })
 

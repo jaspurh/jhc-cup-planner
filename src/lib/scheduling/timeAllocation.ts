@@ -90,14 +90,39 @@ function getEarliestStartTime(
 
 /**
  * Sort matches by allocation priority
- * Priority: Round number, then match number, then dependencies
+ * 
+ * @param matches - Matches to sort
+ * @param groupSchedulingMode - 'sequential' = all Group A, then Group B, etc; 'interleaved' = round-robin across groups
  */
-function sortByPriority(matches: GeneratedMatch[]): GeneratedMatch[] {
+function sortByPriority(
+  matches: GeneratedMatch[], 
+  groupSchedulingMode: 'sequential' | 'interleaved' = 'interleaved'
+): GeneratedMatch[] {
   return [...matches].sort((a, b) => {
-    // First by round number
+    if (groupSchedulingMode === 'sequential') {
+      // Sequential mode: group all matches by groupId first
+      const aGroup = a.groupId || ''
+      const bGroup = b.groupId || ''
+      if (aGroup !== bGroup) {
+        return aGroup.localeCompare(bGroup)
+      }
+    }
+    
+    // Then by round number
     if (a.roundNumber !== b.roundNumber) {
       return a.roundNumber - b.roundNumber
     }
+    
+    // For interleaved mode within same round, sort by group to spread them out
+    if (groupSchedulingMode === 'interleaved') {
+      const aGroup = a.groupId || ''
+      const bGroup = b.groupId || ''
+      if (aGroup !== bGroup) {
+        // Interleave by alternating groups
+        return aGroup.localeCompare(bGroup)
+      }
+    }
+    
     // Then by number of dependencies (fewer first)
     if (a.dependsOn.length !== b.dependsOn.length) {
       return a.dependsOn.length - b.dependsOn.length
@@ -185,7 +210,7 @@ export function allocateTimeSlots(
     if (stageMatches.length === 0) continue
 
     // Apply stage gap
-    if (stage.gapMinutesBefore > 0 && allocatedMatches.size > 0) {
+    if (stage.bufferTimeMinutes > 0 && allocatedMatches.size > 0) {
       // Find the latest end time from previous matches
       let latestEnd = stageStartTime
       for (const [, match] of allocatedMatches) {
@@ -193,11 +218,16 @@ export function allocateTimeSlots(
           latestEnd = match.scheduledEndTime
         }
       }
-      stageStartTime = new Date(latestEnd.getTime() + stage.gapMinutesBefore * 60000)
+      stageStartTime = new Date(latestEnd.getTime() + stage.bufferTimeMinutes * 60000)
     }
 
-    // Sort matches by priority
-    const sortedMatches = sortByPriority(stageMatches)
+    // Sort matches by priority, respecting group scheduling mode
+    const groupSchedulingMode = stage.groupSchedulingMode || 'interleaved'
+    const sortedMatches = sortByPriority(stageMatches, groupSchedulingMode)
+
+    // Track current group for gap insertion in sequential mode
+    let currentGroupId: string | undefined = undefined
+    let groupStartTime = stageStartTime
 
     // Allocate each match
     for (const match of sortedMatches) {
@@ -208,14 +238,34 @@ export function allocateTimeSlots(
         continue
       }
 
-      // Find earliest start based on dependencies
-      const earliestStart = getEarliestStartTime(match, allocatedMatches, stageStartTime)
+      // In sequential mode, add gap when switching to a new group
+      if (groupSchedulingMode === 'sequential' && match.groupId && match.groupId !== currentGroupId) {
+        if (currentGroupId !== undefined && stage.bufferTimeMinutes > 0) {
+          // Find latest end time from previous group's matches
+          let latestGroupEnd = groupStartTime
+          for (const [, allocated] of allocatedMatches) {
+            if (allocated.groupId === currentGroupId && allocated.scheduledEndTime > latestGroupEnd) {
+              latestGroupEnd = allocated.scheduledEndTime
+            }
+          }
+          groupStartTime = new Date(latestGroupEnd.getTime() + stage.bufferTimeMinutes * 60000)
+        }
+        currentGroupId = match.groupId
+      }
 
-      // Add transition time
-      const searchFrom = new Date(earliestStart.getTime() + timing.transitionTimeMinutes * 60000)
+      // Find earliest start based on dependencies
+      const baseTime = groupSchedulingMode === 'sequential' ? groupStartTime : stageStartTime
+      const earliestStart = getEarliestStartTime(match, allocatedMatches, baseTime)
+
+      // For the first match, don't add transition time
+      // Transition time is only needed between matches
+      const isFirstMatch = allocatedMatches.size === 0
+      const searchFrom = isFirstMatch 
+        ? earliestStart 
+        : new Date(earliestStart.getTime() + timing.transitionTimeMinutes * 60000)
 
       // Find next available slot
-      const slot = findNextAvailableSlot(pitches, searchFrom, timing.matchDurationMinutes, timing.transitionTimeMinutes)
+      const slot = findNextAvailableSlot(pitches, searchFrom, timing.matchDurationMinutes, isFirstMatch ? 0 : timing.transitionTimeMinutes)
 
       if (!slot) {
         errors.push(`Could not allocate time slot for match ${match.tempId}`)

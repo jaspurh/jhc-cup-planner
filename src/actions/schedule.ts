@@ -114,20 +114,42 @@ export async function generateTournamentSchedule(
       return { success: false, error: 'Tournament has no start time set' }
     }
 
-    // Convert DB data to scheduling config
-    const stageConfigs = tournament.stages.map((stage: typeof tournament.stages[number]) => dbStageToConfig({
-      ...stage,
-      groups: stage.groups.map((g: typeof stage.groups[number]) => ({
-        ...g,
-        teamAssignments: g.teamAssignments.map((ta: typeof g.teamAssignments[number]) => ({
-          ...ta,
-          registration: {
-            ...ta.registration,
-            registeredTeamName: ta.registration.registeredTeamName,
-          },
+    // Sort stages by order for proper previous stage tracking
+    const sortedStages = [...tournament.stages].sort((a, b) => a.order - b.order)
+    
+    // Convert DB data to scheduling config, passing previous stages for knockout/finals
+    const stageConfigs = sortedStages.map((stage: typeof tournament.stages[number], index: number) => {
+      const stageData = {
+        ...stage,
+        groups: stage.groups.map((g: typeof stage.groups[number]) => ({
+          ...g,
+          teamAssignments: g.teamAssignments.map((ta: typeof g.teamAssignments[number]) => ({
+            ...ta,
+            registration: {
+              ...ta.registration,
+              registeredTeamName: ta.registration.registeredTeamName,
+            },
+          })),
         })),
-      })),
-    }))
+      }
+      
+      // Get previous stages for building incoming team references
+      const previousStages = sortedStages.slice(0, index).map((s: typeof tournament.stages[number]) => ({
+        ...s,
+        groups: s.groups.map((g: typeof s.groups[number]) => ({
+          ...g,
+          teamAssignments: g.teamAssignments.map((ta: typeof g.teamAssignments[number]) => ({
+            ...ta,
+            registration: {
+              ...ta.registration,
+              registeredTeamName: ta.registration.registeredTeamName,
+            },
+          })),
+        })),
+      }))
+      
+      return dbStageToConfig(stageData, previousStages)
+    })
 
     const pitches = tournament.pitches.map((tp: typeof tournament.pitches[number]) => ({
       id: tp.pitch.id,
@@ -471,19 +493,40 @@ export async function previewTournamentSchedule(
       return { success: false, error: 'Tournament has no start time set' }
     }
 
-    const stageConfigs = tournament.stages.map((stage: typeof tournament.stages[number]) => dbStageToConfig({
-      ...stage,
-      groups: stage.groups.map((g: typeof stage.groups[number]) => ({
-        ...g,
-        teamAssignments: g.teamAssignments.map((ta: typeof g.teamAssignments[number]) => ({
-          ...ta,
-          registration: {
-            ...ta.registration,
-            registeredTeamName: ta.registration.registeredTeamName,
-          },
+    // Sort stages by order for proper previous stage tracking
+    const sortedStages = [...tournament.stages].sort((a, b) => a.order - b.order)
+    
+    const stageConfigs = sortedStages.map((stage: typeof tournament.stages[number], index: number) => {
+      const stageData = {
+        ...stage,
+        groups: stage.groups.map((g: typeof stage.groups[number]) => ({
+          ...g,
+          teamAssignments: g.teamAssignments.map((ta: typeof g.teamAssignments[number]) => ({
+            ...ta,
+            registration: {
+              ...ta.registration,
+              registeredTeamName: ta.registration.registeredTeamName,
+            },
+          })),
         })),
-      })),
-    }))
+      }
+      
+      const previousStages = sortedStages.slice(0, index).map((s: typeof tournament.stages[number]) => ({
+        ...s,
+        groups: s.groups.map((g: typeof s.groups[number]) => ({
+          ...g,
+          teamAssignments: g.teamAssignments.map((ta: typeof g.teamAssignments[number]) => ({
+            ...ta,
+            registration: {
+              ...ta.registration,
+              registeredTeamName: ta.registration.registeredTeamName,
+            },
+          })),
+        })),
+      }))
+      
+      return dbStageToConfig(stageData, previousStages)
+    })
 
     const pitches = tournament.pitches.map((tp: typeof tournament.pitches[number]) => ({
       id: tp.pitch.id,

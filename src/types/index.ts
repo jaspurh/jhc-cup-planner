@@ -147,7 +147,7 @@ export interface StageWithGroups {
   name: string
   type: StageType
   order: number
-  gapMinutesBefore: number
+  bufferTimeMinutes: number
   configuration: unknown
   startTime: Date | null
   endTime: Date | null

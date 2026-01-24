@@ -128,13 +128,14 @@ export * from './constraints'
 // ==========================================
 
 import { StageType, RoundRobinType } from '@/types'
+import { IncomingTeamSlot, GroupSchedulingMode } from './types'
 
 interface DBStage {
   id: string
   name: string
   type: StageType
   order: number
-  gapMinutesBefore: number
+  bufferTimeMinutes: number
   configuration: unknown
   groups: {
     id: string
@@ -157,9 +158,71 @@ interface DBStage {
 }
 
 /**
+ * Build incoming team slots for knockout/finals stages based on previous stages
+ */
+function buildIncomingTeams(
+  previousStages: DBStage[],
+  advancingTeamCount: number
+): IncomingTeamSlot[] {
+  const incomingTeams: IncomingTeamSlot[] = []
+  
+  // Get the most recent stage with groups (GROUP_STAGE or GSL_GROUPS)
+  const groupStages = previousStages.filter(
+    s => s.type === 'GROUP_STAGE' || s.type === 'GSL_GROUPS'
+  )
+  
+  if (groupStages.length === 0) {
+    // No group stages - just create generic seed labels
+    for (let i = 1; i <= advancingTeamCount; i++) {
+      incomingTeams.push({
+        seedPosition: i,
+        sourceLabel: `Seed ${i}`,
+        registrationId: null,
+      })
+    }
+    return incomingTeams
+  }
+
+  // Get the last group stage
+  const lastGroupStage = groupStages[groupStages.length - 1]
+  const groups = [...lastGroupStage.groups].sort((a, b) => a.order - b.order)
+  const teamsPerGroup = Math.ceil(advancingTeamCount / groups.length)
+  
+  // Determine position labels based on stage type
+  const isGSL = lastGroupStage.type === 'GSL_GROUPS'
+  const positionLabels = isGSL 
+    ? ['Winner', 'Runner-up'] 
+    : ['1st', '2nd', '3rd', '4th', '5th', '6th']
+
+  let seedPosition = 1
+  
+  // Standard seeding: 1st from each group first, then 2nd from each, etc.
+  for (let pos = 0; pos < teamsPerGroup && seedPosition <= advancingTeamCount; pos++) {
+    for (const group of groups) {
+      if (seedPosition > advancingTeamCount) break
+      
+      const posLabel = positionLabels[pos] || `${pos + 1}th`
+      const sourceLabel = `${group.name} ${posLabel}`
+      
+      incomingTeams.push({
+        seedPosition,
+        sourceLabel,
+        registrationId: null, // TBD - winners not known yet
+      })
+      seedPosition++
+    }
+  }
+
+  return incomingTeams
+}
+
+/**
  * Convert database stage data to StageConfig for scheduling
  */
-export function dbStageToConfig(stage: DBStage): StageConfig {
+export function dbStageToConfig(
+  stage: DBStage, 
+  previousStages: DBStage[] = []
+): StageConfig {
   const config = stage.configuration as Record<string, unknown> | undefined
   
   // For knockout/finals stages, get advancingTeamCount from config or count team assignments
@@ -169,12 +232,21 @@ export function dbStageToConfig(stage: DBStage): StageConfig {
   )
   const advancingTeamCount = (config?.advancingTeamCount as number) || teamsFromGroups || 0
 
+  // Build incoming teams for knockout/finals stages
+  let incomingTeams: IncomingTeamSlot[] | undefined
+  if (stage.type === 'KNOCKOUT' || stage.type === 'FINAL') {
+    incomingTeams = buildIncomingTeams(previousStages, advancingTeamCount)
+  }
+
+  // Get group scheduling mode from config
+  const groupSchedulingMode = (config?.groupSchedulingMode as GroupSchedulingMode) || 'interleaved'
+
   return {
     stageId: stage.id,
     stageName: stage.name,
     type: stage.type,
     order: stage.order,
-    gapMinutesBefore: stage.gapMinutesBefore,
+    bufferTimeMinutes: stage.bufferTimeMinutes,
     customConfig: config,
     groups: stage.groups.map(group => ({
       groupId: group.id,
@@ -187,6 +259,8 @@ export function dbStageToConfig(stage: DBStage): StageConfig {
       })),
     })),
     advancingTeamCount,
+    incomingTeams,
+    groupSchedulingMode,
   }
 }
 

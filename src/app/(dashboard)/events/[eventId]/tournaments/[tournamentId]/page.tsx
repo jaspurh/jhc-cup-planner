@@ -157,9 +157,9 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
                           {formatStageType(stage.type)} • {stage.matchCount} matches
                         </p>
                       </div>
-                      {stage.gapMinutesBefore > 0 && (
+                      {stage.bufferTimeMinutes > 0 && (
                         <span className="text-xs text-gray-400">
-                          +{stage.gapMinutesBefore} min gap
+                          +{stage.bufferTimeMinutes} min gap
                         </span>
                       )}
                     </div>
