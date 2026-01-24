@@ -232,6 +232,135 @@ function buildIncomingTeams(
 }
 
 /**
+ * Build incoming team distribution for a group stage that follows another group stage.
+ * This handles proper seeding where:
+ * - Each new group gets a mix of 1st and 2nd place teams from the previous stage
+ * - 1st seeds play 2nd seeds in opening matches (for GSL: M1 and M2)
+ * 
+ * Example for 4 prev groups → 2 GSL groups:
+ * - GSL Group 1: A1 (seed 1), D1 (seed 2), B2 (seed 3), C2 (seed 4)
+ * - GSL Group 2: B1 (seed 1), C1 (seed 2), A2 (seed 3), D2 (seed 4)
+ */
+function buildIncomingTeamsForGroups(
+  previousStages: DBStage[],
+  targetGroupCount: number,
+  teamsPerTargetGroup: number
+): Map<number, IncomingTeamSlot[]> {
+  const result = new Map<number, IncomingTeamSlot[]>()
+  
+  // Initialize empty arrays for each target group
+  for (let g = 0; g < targetGroupCount; g++) {
+    result.set(g, [])
+  }
+  
+  // Get the most recent stage with groups
+  const groupStages = previousStages.filter(
+    s => s.type === 'GROUP_STAGE' || s.type === 'GSL_GROUPS'
+  )
+  
+  if (groupStages.length === 0) {
+    // No previous group stage - create generic seeds
+    for (let g = 0; g < targetGroupCount; g++) {
+      const groupTeams: IncomingTeamSlot[] = []
+      for (let t = 0; t < teamsPerTargetGroup; t++) {
+        const seedPosition = t + 1
+        groupTeams.push({
+          seedPosition,
+          sourceLabel: `Seed ${g * teamsPerTargetGroup + t + 1}`,
+          registrationId: null,
+        })
+      }
+      result.set(g, groupTeams)
+    }
+    return result
+  }
+  
+  const lastGroupStage = groupStages[groupStages.length - 1]
+  const prevGroups = [...lastGroupStage.groups].sort((a, b) => a.order - b.order)
+  const isGSL = lastGroupStage.type === 'GSL_GROUPS'
+  const positionLabels = isGSL 
+    ? ['Winner', 'Runner-up'] 
+    : ['1st', '2nd', '3rd', '4th', '5th', '6th']
+  
+  // Calculate how many teams advance from each position
+  const totalTeamsAdvancing = targetGroupCount * teamsPerTargetGroup
+  const teamsPerPosition = Math.ceil(totalTeamsAdvancing / 2) // Assume top 2 from each group
+  
+  // Build list of all advancing teams with their source info
+  const allAdvancingTeams: { sourceLabel: string; position: number; groupIndex: number }[] = []
+  
+  // Get 1st place from each previous group
+  for (let i = 0; i < prevGroups.length && allAdvancingTeams.length < teamsPerPosition; i++) {
+    allAdvancingTeams.push({
+      sourceLabel: `${prevGroups[i].name} ${positionLabels[0]}`,
+      position: 1,
+      groupIndex: i,
+    })
+  }
+  
+  // Get 2nd place from each previous group
+  for (let i = 0; i < prevGroups.length && allAdvancingTeams.length < totalTeamsAdvancing; i++) {
+    allAdvancingTeams.push({
+      sourceLabel: `${prevGroups[i].name} ${positionLabels[1] || '2nd'}`,
+      position: 2,
+      groupIndex: i,
+    })
+  }
+  
+  // Now distribute teams to target groups using cross-seeding
+  const firstPlaceTeams = allAdvancingTeams.filter(t => t.position === 1)
+  const secondPlaceTeams = allAdvancingTeams.filter(t => t.position === 2)
+  
+  for (let g = 0; g < targetGroupCount; g++) {
+    const groupTeams: IncomingTeamSlot[] = []
+    
+    // For GSL with 4 teams per group: 2 first-place + 2 second-place teams
+    // Seed 1 & 3 are 1st place, Seed 2 & 4 are 2nd place (so 1st meets 2nd in M1 and M2)
+    const teamsNeeded = teamsPerTargetGroup
+    const firstNeeded = Math.ceil(teamsNeeded / 2)
+    const secondNeeded = teamsNeeded - firstNeeded
+    
+    // Pick 1st place teams using snake pattern for fairness
+    for (let i = 0; i < firstNeeded && firstPlaceTeams.length > 0; i++) {
+      const pickIndex = i % 2 === 0 
+        ? g % firstPlaceTeams.length
+        : (firstPlaceTeams.length - 1 - (g % firstPlaceTeams.length)) % firstPlaceTeams.length
+      
+      const team = firstPlaceTeams.splice(pickIndex >= firstPlaceTeams.length ? 0 : pickIndex, 1)[0]
+      if (team) {
+        const seedPos = i * 2 + 1 // 1, 3, 5...
+        groupTeams.push({
+          seedPosition: seedPos,
+          sourceLabel: team.sourceLabel,
+          registrationId: null,
+        })
+      }
+    }
+    
+    // Pick 2nd place teams
+    for (let i = 0; i < secondNeeded && secondPlaceTeams.length > 0; i++) {
+      const pickIndex = (firstNeeded - 1 - i + g) % secondPlaceTeams.length
+      const actualIndex = pickIndex >= 0 ? pickIndex % secondPlaceTeams.length : 0
+      
+      const team = secondPlaceTeams.splice(actualIndex >= secondPlaceTeams.length ? 0 : actualIndex, 1)[0]
+      if (team) {
+        const seedPos = (i + 1) * 2 // 2, 4, 6...
+        groupTeams.push({
+          seedPosition: seedPos,
+          sourceLabel: team.sourceLabel,
+          registrationId: null,
+        })
+      }
+    }
+    
+    groupTeams.sort((a, b) => a.seedPosition - b.seedPosition)
+    result.set(g, groupTeams)
+  }
+  
+  return result
+}
+
+/**
  * Convert database stage data to StageConfig for scheduling
  */
 export function dbStageToConfig(
@@ -253,8 +382,26 @@ export function dbStageToConfig(
     incomingTeams = buildIncomingTeams(previousStages, advancingTeamCount)
   }
 
+  // Build incoming teams for group stages that follow other group stages
+  let groupIncomingTeams: Map<number, IncomingTeamSlot[]> | undefined
+  const hasPreviousGroupStage = previousStages.some(
+    s => s.type === 'GROUP_STAGE' || s.type === 'GSL_GROUPS'
+  )
+  
+  if ((stage.type === 'GSL_GROUPS' || stage.type === 'GROUP_STAGE') && hasPreviousGroupStage) {
+    const teamsPerGroup = stage.type === 'GSL_GROUPS' ? 4 : 4
+    groupIncomingTeams = buildIncomingTeamsForGroups(
+      previousStages,
+      stage.groups.length,
+      teamsPerGroup
+    )
+  }
+
   // Get group scheduling mode from config
   const groupSchedulingMode = (config?.groupSchedulingMode as GroupSchedulingMode) || 'interleaved'
+
+  // Sort groups by order
+  const sortedGroups = [...stage.groups].sort((a, b) => a.order - b.order)
 
   return {
     stageId: stage.id,
@@ -263,7 +410,7 @@ export function dbStageToConfig(
     order: stage.order,
     bufferTimeMinutes: stage.bufferTimeMinutes,
     customConfig: config,
-    groups: stage.groups.map(group => ({
+    groups: sortedGroups.map((group, index) => ({
       groupId: group.id,
       groupName: group.name,
       groupOrder: group.order,
@@ -273,6 +420,8 @@ export function dbStageToConfig(
         seedPosition: ta.seedPosition ?? undefined,
         teamName: ta.registration.registeredTeamName || ta.registration.team.name,
       })),
+      // Add incoming teams for groups following other group stages
+      incomingTeams: groupIncomingTeams?.get(index),
     })),
     advancingTeamCount,
     incomingTeams,

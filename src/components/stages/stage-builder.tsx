@@ -130,6 +130,7 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
     numMatches?: number
     groupSchedulingMode?: 'sequential' | 'interleaved'
     hasThirdPlace?: boolean
+    advancingTeamsPerGroup?: number
   }) => {
     setError(null)
     
@@ -138,6 +139,10 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
           numGroups: config.numGroups || 4, 
           roundRobinType: config.roundRobinType || 'SINGLE',
           groupSchedulingMode: config.groupSchedulingMode || 'sequential',
+          // Include advancingTeamsPerGroup for regular groups (GSL is always 2)
+          advancingTeamsPerGroup: template.configType === 'groups' 
+            ? (config.advancingTeamsPerGroup || 2) 
+            : 2,
         }
       : { 
           advancingTeamCount: config.numMatches || 4,
@@ -183,9 +188,28 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
     }
   }
 
-  const handleUpdateStageConfig = async (stageId: string, newConfig: Record<string, unknown>) => {
+  const handleUpdateStageConfig = async (stageId: string, updates: Record<string, unknown>) => {
     setError(null)
-    const result = await updateStage(stageId, { configuration: newConfig })
+    
+    // Separate direct stage fields from configuration fields
+    const { bufferTimeMinutes, ...configFields } = updates
+    
+    const updateData: { bufferTimeMinutes?: number; configuration?: Record<string, unknown> } = {}
+    
+    // bufferTimeMinutes is a direct column on Stage
+    if (bufferTimeMinutes !== undefined) {
+      updateData.bufferTimeMinutes = bufferTimeMinutes as number
+    }
+    
+    // Other fields (groupSchedulingMode, advancingTeamsPerGroup, etc.) go into configuration JSON
+    if (Object.keys(configFields).length > 0) {
+      // Find the stage to merge with existing configuration
+      const stage = stages.find(s => s.id === stageId)
+      const existingConfig = (stage?.configuration as Record<string, unknown>) || {}
+      updateData.configuration = { ...existingConfig, ...configFields }
+    }
+    
+    const result = await updateStage(stageId, updateData)
 
     if (result.success) {
       refreshData()
@@ -273,6 +297,58 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
   const assignedTeamIds = getAssignedTeamIds()
   const unassignedTeams = confirmedTeams.filter(t => !assignedTeamIds.has(t.id))
 
+  // Calculate teams available for the next stage based on existing stages
+  const calculateTeamsFromPreviousStages = (): { totalTeams: number; advancingTeams: number; lastStageType: StageType | null } => {
+    if (stages.length === 0) {
+      // First stage - use confirmed teams
+      return { totalTeams: confirmedTeams.length, advancingTeams: confirmedTeams.length, lastStageType: null }
+    }
+
+    const lastStage = stages[stages.length - 1]
+    const config = lastStage.configuration as Record<string, unknown> | null
+    
+    // Calculate advancing teams based on stage type
+    if (lastStage.type === 'GROUP_STAGE') {
+      // Read advancingTeamsPerGroup from config, default to 2
+      const advancingPerGroup = (config?.advancingTeamsPerGroup as number) || 2
+      const teamsPerGroup = lastStage.groups[0]?.teamAssignments?.length || 4
+      return { 
+        totalTeams: lastStage.groups.length * teamsPerGroup,
+        advancingTeams: lastStage.groups.length * advancingPerGroup,
+        lastStageType: lastStage.type
+      }
+    } else if (lastStage.type === 'GSL_GROUPS') {
+      // GSL: 2 advance from each group (winner + runner-up from decider)
+      return { 
+        totalTeams: lastStage.groups.length * 4,
+        advancingTeams: lastStage.groups.length * 2,
+        lastStageType: lastStage.type
+      }
+    } else if (lastStage.type === 'KNOCKOUT') {
+      // Knockout: 1 winner advances (or 2 if we count 3rd place)
+      const numMatches = (config?.advancingTeamCount as number) || 4
+      const hasThirdPlace = (config?.hasThirdPlace as boolean) || false
+      return { 
+        totalTeams: numMatches,
+        advancingTeams: hasThirdPlace ? 2 : 1, // winner + 3rd place or just winner
+        lastStageType: lastStage.type
+      }
+    } else if (lastStage.type === 'ROUND_ROBIN') {
+      // Round robin - assume top N advance based on group size
+      const teamCount = lastStage.groups[0]?.teamAssignments?.length || 4
+      return { 
+        totalTeams: teamCount,
+        advancingTeams: Math.min(4, teamCount), // top 4 or all
+        lastStageType: lastStage.type
+      }
+    }
+    
+    // Default fallback
+    return { totalTeams: confirmedTeams.length, advancingTeams: 4, lastStageType: lastStage.type }
+  }
+
+  const previousStageInfo = calculateTeamsFromPreviousStages()
+
   return (
     <Card>
       <CardHeader>
@@ -303,6 +379,10 @@ export function StageBuilder({ tournamentId, initialStages, confirmedTeams }: St
             onAdd={handleAddStage}
             onCancel={() => setShowAddStage(false)}
             isPending={isPending}
+            isFirstStage={stages.length === 0}
+            totalConfirmedTeams={confirmedTeams.length}
+            teamsFromPreviousStage={previousStageInfo.advancingTeams}
+            lastStageType={previousStageInfo.lastStageType}
           />
         )}
 
@@ -350,12 +430,25 @@ interface AddStageFormProps {
     numMatches?: number
     groupSchedulingMode?: 'sequential' | 'interleaved'
     hasThirdPlace?: boolean
+    advancingTeamsPerGroup?: number
   }) => void
   onCancel: () => void
   isPending: boolean
+  isFirstStage: boolean
+  totalConfirmedTeams: number
+  teamsFromPreviousStage: number
+  lastStageType: StageType | null
 }
 
-function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
+function AddStageForm({ 
+  onAdd, 
+  onCancel, 
+  isPending,
+  isFirstStage,
+  totalConfirmedTeams,
+  teamsFromPreviousStage,
+  lastStageType
+}: AddStageFormProps) {
   const [selectedType, setSelectedType] = useState<StageType | null>(null)
   const [name, setName] = useState('')
   const [gapMinutes, setGapMinutes] = useState(0)
@@ -364,11 +457,67 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
   const [numMatches, setNumMatches] = useState(4)
   const [hasThirdPlace, setHasThirdPlace] = useState(false)
   const [groupSchedulingMode, setGroupSchedulingMode] = useState<'sequential' | 'interleaved'>('sequential')
+  const [advancingTeamsPerGroup, setAdvancingTeamsPerGroup] = useState(2)
 
   const selectedTemplate = STAGE_TEMPLATES.find(t => t.type === selectedType)
 
+  // Calculate available teams for this stage
+  const availableTeams = isFirstStage ? totalConfirmedTeams : teamsFromPreviousStage
+
+  // Calculate valid group options based on available teams (for GSL which requires 4 per group)
+  const getValidGSLGroupOptions = (): number[] => {
+    const maxGroups = Math.floor(availableTeams / 4)
+    return [1, 2, 3, 4, 5, 6, 7, 8].filter(n => n <= maxGroups)
+  }
+
+  // Calculate valid knockout options (must be power of 2 and <= available teams)
+  const getValidKnockoutOptions = (): number[] => {
+    const options = [2, 4, 8, 16, 32, 64]
+    return options.filter(n => n <= availableTeams)
+  }
+
+  // Get validation info (warning, not blocking for regular groups)
+  const getValidationInfo = (): { type: 'warning' | 'error' | 'info' | null; message: string } | null => {
+    if (!selectedTemplate) return null
+    
+    if (selectedTemplate.configType === 'groups') {
+      // Regular group stage - flexible, just show info
+      return {
+        type: 'info',
+        message: `${availableTeams} teams available. You can configure group sizes after creation.`
+      }
+    } else if (selectedTemplate.configType === 'gsl_groups') {
+      const teamsNeeded = numGroups * 4
+      if (teamsNeeded > availableTeams) {
+        return {
+          type: 'error',
+          message: `${numGroups} GSL groups need ${teamsNeeded} teams (4 per group), but only ${availableTeams} available.`
+        }
+      }
+      return {
+        type: 'info',
+        message: `${numGroups} groups × 4 teams = ${teamsNeeded} teams. ${availableTeams} available.`
+      }
+    } else if (selectedTemplate.configType === 'knockout') {
+      if (numMatches > availableTeams) {
+        return {
+          type: 'error',
+          message: `Knockout needs ${numMatches} teams, but only ${availableTeams} available.`
+        }
+      }
+      return {
+        type: 'info',
+        message: `${numMatches}-team bracket. ${availableTeams} teams available from previous stage.`
+      }
+    }
+    return null
+  }
+
+  const validationInfo = getValidationInfo()
+  const hasBlockingError = validationInfo?.type === 'error'
+
   const handleSubmit = () => {
-    if (!selectedTemplate || !name.trim()) return
+    if (!selectedTemplate || !name.trim() || hasBlockingError) return
     onAdd(selectedTemplate, {
       name: name.trim(),
       bufferTimeMinutes: gapMinutes,
@@ -377,12 +526,23 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
       numMatches: !selectedTemplate.hasGroups ? numMatches : undefined,
       groupSchedulingMode: selectedTemplate.hasGroups ? groupSchedulingMode : undefined,
       hasThirdPlace: selectedTemplate.configType === 'knockout' ? hasThirdPlace : undefined,
+      // Only for regular GROUP_STAGE (GSL is fixed at 2)
+      advancingTeamsPerGroup: selectedTemplate.configType === 'groups' ? advancingTeamsPerGroup : undefined,
     })
   }
 
   return (
     <div className="border rounded-lg p-4 bg-blue-50 space-y-4">
-      <h3 className="font-semibold text-gray-900">Add New Stage</h3>
+      <div className="flex justify-between items-start">
+        <h3 className="font-semibold text-gray-900">Add New Stage</h3>
+        <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full border">
+          {isFirstStage ? (
+            <span>{totalConfirmedTeams} confirmed teams</span>
+          ) : (
+            <span>{teamsFromPreviousStage} teams from previous stage</span>
+          )}
+        </div>
+      </div>
 
       {/* Stage Type Selection */}
       {!selectedType ? (
@@ -393,6 +553,19 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
               onClick={() => {
                 setSelectedType(template.type)
                 setName(template.defaultName)
+                
+                // Set sensible defaults based on available teams
+                if (template.configType === 'gsl_groups') {
+                  const validGSL = [1, 2, 3, 4, 5, 6, 7, 8].filter(n => n * 4 <= availableTeams)
+                  if (validGSL.length > 0) {
+                    setNumGroups(validGSL[validGSL.length - 1])
+                  }
+                } else if (template.configType === 'knockout') {
+                  const validKnockout = [2, 4, 8, 16, 32, 64].filter(n => n <= availableTeams)
+                  if (validKnockout.length > 0) {
+                    setNumMatches(validKnockout[validKnockout.length - 1])
+                  }
+                }
               }}
               className="p-4 border rounded-lg bg-white hover:border-blue-500 hover:bg-blue-50 text-left transition-colors"
             >
@@ -433,23 +606,43 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
 
           {/* Group Stage specific */}
           {selectedTemplate?.configType === 'groups' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Number of Groups
-              </label>
-              <select
-                value={numGroups}
-                onChange={(e) => setNumGroups(parseInt(e.target.value))}
-                className="border rounded-md px-3 py-2 text-gray-900 bg-white"
-              >
-                {[2, 3, 4, 5, 6, 7, 8].map(n => (
-                  <option key={n} value={n}>{n} groups</option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Each group&apos;s round-robin type can be configured individually after creation
-              </p>
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Number of Groups
+                </label>
+                <select
+                  value={numGroups}
+                  onChange={(e) => setNumGroups(parseInt(e.target.value))}
+                  className="border rounded-md px-3 py-2 text-gray-900 bg-white"
+                >
+                  {[2, 3, 4, 5, 6, 7, 8].map(n => (
+                    <option key={n} value={n}>{n} groups</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Each group&apos;s round-robin type can be configured individually after creation
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Teams Advancing per Group
+                </label>
+                <select
+                  value={advancingTeamsPerGroup}
+                  onChange={(e) => setAdvancingTeamsPerGroup(parseInt(e.target.value))}
+                  className="border rounded-md px-3 py-2 text-gray-900 bg-white"
+                >
+                  {[1, 2, 3, 4].map(n => (
+                    <option key={n} value={n}>{n} team{n > 1 ? 's' : ''} per group</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Total advancing: {numGroups * advancingTeamsPerGroup} teams
+                </p>
+              </div>
+            </>
           )}
 
           {/* GSL Groups specific */}
@@ -463,12 +656,16 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
                 onChange={(e) => setNumGroups(parseInt(e.target.value))}
                 className="border rounded-md px-3 py-2 text-gray-900 bg-white"
               >
-                {[2, 3, 4, 5, 6, 7, 8].map(n => (
-                  <option key={n} value={n}>{n} groups</option>
-                ))}
+                {getValidGSLGroupOptions().length > 0 ? (
+                  getValidGSLGroupOptions().map(n => (
+                    <option key={n} value={n}>{n} groups ({n * 4} teams)</option>
+                  ))
+                ) : (
+                  <option disabled>Not enough teams (need at least 4)</option>
+                )}
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                GSL format: 4 teams per group, 5 matches each. Total teams needed: {numGroups * 4}
+                GSL format: 4 teams per group, 5 matches each • 2 advance per group
               </p>
             </div>
           )}
@@ -518,20 +715,25 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
             <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Number of Teams Advancing
+                  Number of Teams
                 </label>
                 <select
                   value={numMatches}
                   onChange={(e) => setNumMatches(parseInt(e.target.value))}
                   className="border rounded-md px-3 py-2 text-gray-900 bg-white"
                 >
-                  <option value={2}>2 teams (Final only)</option>
-                  <option value={4}>4 teams (Semifinals)</option>
-                  <option value={8}>8 teams (Quarterfinals)</option>
-                  <option value={16}>16 teams (Round of 16)</option>
+                  {getValidKnockoutOptions().length > 0 ? (
+                    getValidKnockoutOptions().map(n => (
+                      <option key={n} value={n}>
+                        {n} teams ({n === 2 ? 'Final only' : n === 4 ? 'Semifinals' : n === 8 ? 'Quarterfinals' : `Round of ${n}`})
+                      </option>
+                    ))
+                  ) : (
+                    <option disabled>Not enough teams (need at least 2)</option>
+                  )}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Single elimination bracket - specify how many teams advance from previous stage
+                  Single elimination bracket • {availableTeams} teams available
                 </p>
               </div>
               
@@ -597,9 +799,22 @@ function AddStageForm({ onAdd, onCancel, isPending }: AddStageFormProps) {
             </div>
           )}
 
+          {/* Validation Info */}
+          {validationInfo && (
+            <div className={`px-3 py-2 rounded-md text-sm ${
+              validationInfo.type === 'error' 
+                ? 'bg-red-50 border border-red-200 text-red-700' 
+                : validationInfo.type === 'warning'
+                  ? 'bg-yellow-50 border border-yellow-200 text-yellow-700'
+                  : 'bg-gray-50 border border-gray-200 text-gray-600'
+            }`}>
+              {validationInfo.message}
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-2 pt-2">
-            <Button onClick={handleSubmit} disabled={!name.trim() || isPending}>
+            <Button onClick={handleSubmit} disabled={!name.trim() || isPending || hasBlockingError}>
               Create Stage
             </Button>
             <Button variant="secondary" onClick={() => setSelectedType(null)}>
@@ -652,7 +867,7 @@ function StageCard({
     setNewGroupName('')
   }
 
-  const config = stage.configuration as { numGroups?: number; roundRobinType?: string; numMatches?: number; groupSchedulingMode?: string; hasThirdPlace?: boolean } | null
+  const config = stage.configuration as { numGroups?: number; roundRobinType?: string; numMatches?: number; groupSchedulingMode?: string; hasThirdPlace?: boolean; advancingTeamsPerGroup?: number } | null
 
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -741,13 +956,45 @@ function StageCard({
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-gray-600">Buffer Time:</span>
-                  <span className="font-bold text-gray-900 bg-white px-2 py-1 rounded border">
-                    {stage.bufferTimeMinutes} min
-                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    value={stage.bufferTimeMinutes}
+                    onChange={(e) => {
+                      const newValue = parseInt(e.target.value) || 0
+                      onUpdateStageConfig(stage.id, { bufferTimeMinutes: newValue })
+                    }}
+                    disabled={stage._count.matches > 0}
+                    className="w-16 font-bold text-gray-900 bg-white px-2 py-1 rounded border text-center disabled:bg-gray-100"
+                  />
+                  <span className="text-gray-500">min</span>
                   {config?.groupSchedulingMode === 'sequential' && stage.bufferTimeMinutes > 0 && (
                     <span className="text-blue-600 text-xs">(added between groups)</span>
                   )}
                 </div>
+                
+                {/* Advancing teams per group - only for regular group stages */}
+                {stage.type === 'GROUP_STAGE' && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">Advancing:</span>
+                    <select
+                      value={(config?.advancingTeamsPerGroup as number) || 2}
+                      onChange={(e) => {
+                        onUpdateStageConfig(stage.id, { advancingTeamsPerGroup: parseInt(e.target.value) })
+                      }}
+                      disabled={stage._count.matches > 0}
+                      className="font-bold text-gray-900 bg-white px-2 py-1 rounded border disabled:bg-gray-100"
+                    >
+                      {[1, 2, 3, 4].map(n => (
+                        <option key={n} value={n}>{n} per group</option>
+                      ))}
+                    </select>
+                    <span className="text-blue-600 text-xs">
+                      ({stage.groups.length * ((config?.advancingTeamsPerGroup as number) || 2)} total)
+                    </span>
+                  </div>
+                )}
               </div>
               {stage._count.matches > 0 && (
                 <p className="text-xs text-gray-500 mt-2">Clear the schedule to change these settings</p>

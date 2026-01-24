@@ -180,7 +180,8 @@ export function generateGSLMatches(
   stageId: string,
   groupId: string,
   groupName?: string,
-  groupOrder?: number
+  groupOrder?: number,
+  incomingTeams?: { seedPosition: number; sourceLabel: string }[]
 ): GeneratedMatch[] {
   // GSL requires exactly 4 teams, but we can generate with placeholders if teams not yet assigned
   const hasTeams = teams.length === 4
@@ -195,11 +196,23 @@ export function generateGSLMatches(
   const teamC = sortedTeams[2] || null
   const teamD = sortedTeams[3] || null
   
+  // Get source labels for placeholders from incoming teams or use generic labels
+  const getSourceLabel = (seedPos: number, fallback: string): string => {
+    if (hasTeams) {
+      const team = sortedTeams.find(t => t.seedPosition === seedPos)
+      return team?.teamName || fallback
+    }
+    const incoming = incomingTeams?.find(t => t.seedPosition === seedPos)
+    return incoming?.sourceLabel || fallback
+  }
+  
   const matches: GeneratedMatch[] = []
   const baseId = (pos: GSLMatchPosition) => `${stageId.slice(-6)}-${groupId.slice(-4)}-${pos}`
   const groupLabel = groupName || 'Group'
+  // Short group label for match references (e.g., "A" from "Group A")
+  const shortGroupLabel = groupName?.replace(/^Group\s*/i, '') || ''
 
-  // M1: A vs B (Opening Match 1)
+  // M1: Seed 1 vs Seed 2 (Opening Match 1 - 1st place team vs 2nd place team)
   matches.push({
     tempId: baseId('M1'),
     stageId,
@@ -211,13 +224,14 @@ export function generateGSLMatches(
     bracketPosition: 'M1',
     dependsOn: [],
     metadata: {
-      homeSource: hasTeams ? `Seed 1` : `${groupLabel} Slot 1`,
-      awaySource: hasTeams ? `Seed 2` : `${groupLabel} Slot 2`,
+      homeSource: getSourceLabel(1, `${groupLabel} Seed 1`),
+      awaySource: getSourceLabel(2, `${groupLabel} Seed 2`),
+      matchLabel: `${shortGroupLabel}1: Opening (1v2)`,
       groupOrder,
     },
   })
 
-  // M2: C vs D (Opening Match 2)
+  // M2: Seed 3 vs Seed 4 (Opening Match 2 - 1st place team vs 2nd place team)
   matches.push({
     tempId: baseId('M2'),
     stageId,
@@ -229,13 +243,14 @@ export function generateGSLMatches(
     bracketPosition: 'M2',
     dependsOn: [],
     metadata: {
-      homeSource: hasTeams ? `Seed 3` : `${groupLabel} Slot 3`,
-      awaySource: hasTeams ? `Seed 4` : `${groupLabel} Slot 4`,
+      homeSource: getSourceLabel(3, `${groupLabel} Seed 3`),
+      awaySource: getSourceLabel(4, `${groupLabel} Seed 4`),
+      matchLabel: `${shortGroupLabel}2: Opening (3v4)`,
       groupOrder,
     },
   })
 
-  // M3: Winner M1 vs Winner M2 (Winners Match)
+  // M3: Winner M1 vs Winner M2 (Winners Match - for 1st place)
   matches.push({
     tempId: baseId('M3'),
     stageId,
@@ -247,13 +262,14 @@ export function generateGSLMatches(
     bracketPosition: 'M3',
     dependsOn: [baseId('M1'), baseId('M2')],
     metadata: {
-      homeSource: 'Winner of M1',
-      awaySource: 'Winner of M2',
+      homeSource: `${groupLabel} ${shortGroupLabel}1 Winner`,
+      awaySource: `${groupLabel} ${shortGroupLabel}2 Winner`,
+      matchLabel: `${shortGroupLabel}3: Winners (for 1st)`,
       groupOrder,
     },
   })
 
-  // M4: Loser M1 vs Loser M2 (Losers Match - Elimination)
+  // M4: Loser M1 vs Loser M2 (Losers Match - Elimination for 4th)
   matches.push({
     tempId: baseId('M4'),
     stageId,
@@ -265,13 +281,14 @@ export function generateGSLMatches(
     bracketPosition: 'M4',
     dependsOn: [baseId('M1'), baseId('M2')],
     metadata: {
+      homeSource: `${groupLabel} ${shortGroupLabel}1 Loser`,
+      awaySource: `${groupLabel} ${shortGroupLabel}2 Loser`,
+      matchLabel: `${shortGroupLabel}4: Elimination`,
       groupOrder,
-      homeSource: 'Loser of M1',
-      awaySource: 'Loser of M2',
     },
   })
 
-  // M5: Loser M3 vs Winner M4 (Decider Match)
+  // M5: Loser M3 vs Winner M4 (Decider Match - for 2nd place)
   matches.push({
     tempId: baseId('M5'),
     stageId,
@@ -283,8 +300,9 @@ export function generateGSLMatches(
     bracketPosition: 'M5',
     dependsOn: [baseId('M3'), baseId('M4')],
     metadata: {
-      homeSource: 'Loser of M3',
-      awaySource: 'Winner of M4',
+      homeSource: `${groupLabel} ${shortGroupLabel}3 Loser`,
+      awaySource: `${groupLabel} ${shortGroupLabel}4 Winner`,
+      matchLabel: `${shortGroupLabel}5: Decider (for 2nd)`,
       isDecider: true,
       groupOrder,
     },
@@ -700,7 +718,14 @@ export function generateStageMatches(stage: StageConfig): GeneratedMatch[] {
         throw new Error('GSL_GROUPS requires groups')
       }
       return stage.groups.flatMap(group =>
-        generateGSLMatches(group.teams, stage.stageId, group.groupId, group.groupName, group.groupOrder)
+        generateGSLMatches(
+          group.teams, 
+          stage.stageId, 
+          group.groupId, 
+          group.groupName, 
+          group.groupOrder,
+          group.incomingTeams
+        )
       )
 
     case 'ROUND_ROBIN':

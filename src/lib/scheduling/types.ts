@@ -37,6 +37,8 @@ export interface GeneratedMatch {
     /** Source of advancing team (e.g., "Winner of QF1") */
     homeSource?: string
     awaySource?: string
+    /** Descriptive label for the match (e.g., "A3: Winners Match") */
+    matchLabel?: string
     /** Is this a decider/tiebreaker match? */
     isDecider?: boolean
     /** Bracket type for double elimination */
@@ -66,6 +68,8 @@ export interface GroupConfig {
   groupOrder: number
   teams: TeamSlot[]
   roundRobinType: RoundRobinType
+  /** Incoming teams from previous stages (for groups following other group stages) */
+  incomingTeams?: IncomingTeamSlot[]
 }
 
 /**
