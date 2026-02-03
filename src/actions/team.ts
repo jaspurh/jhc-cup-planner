@@ -515,6 +515,17 @@ export async function updateRegistrationStatus(
       return { success: false, error: 'Not authorized' }
     }
 
+    // If withdrawing, also remove from any groups the team is assigned to
+    if (validated.status === 'WITHDRAWN') {
+      await db.groupTeamAssignment.deleteMany({
+        where: { registrationId: validated.registrationId }
+      })
+      
+      logger.info('Removed team from all groups on withdrawal', { 
+        registrationId: validated.registrationId 
+      })
+    }
+
     // Update registration
     await db.teamRegistration.update({
       where: { id: validated.registrationId },

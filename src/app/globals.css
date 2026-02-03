@@ -24,3 +24,81 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Print styles for schedule */
+@media print {
+  /* Hide navigation and action buttons */
+  nav,
+  aside,
+  .no-print,
+  button:not(.print-visible),
+  [data-no-print] {
+    display: none !important;
+  }
+
+  /* Reset backgrounds for print */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12px;
+  }
+
+  /* Make containers full width */
+  .container,
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Remove shadows and adjust borders */
+  .shadow,
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  /* Ensure content doesn't break awkwardly */
+  .bg-white {
+    background: white !important;
+    page-break-inside: avoid;
+  }
+
+  /* Headers on each page */
+  h1 {
+    page-break-after: avoid;
+  }
+
+  /* Keep match rows together */
+  .match-row {
+    page-break-inside: avoid;
+  }
+
+  /* Adjust card styling for print */
+  .rounded-lg {
+    border-radius: 0 !important;
+  }
+
+  /* Make badges visible */
+  .badge {
+    border: 1px solid #ccc !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Adjust colors for print */
+  .text-gray-500,
+  .text-gray-400 {
+    color: #666 !important;
+  }
+
+  .text-gray-900 {
+    color: black !important;
+  }
+
+  /* Hide hover effects */
+  .hover\:bg-gray-50:hover {
+    background: transparent !important;
+  }
+}

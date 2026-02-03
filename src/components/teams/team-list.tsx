@@ -147,6 +147,26 @@ export function TeamList({ registrations, canManage = true }: TeamListProps) {
                         Withdraw
                       </Button>
                     )}
+                    {reg.status === 'WITHDRAWN' && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleStatusChange(reg.id, 'CONFIRMED')}
+                        loading={loadingId === reg.id}
+                      >
+                        Reinstate
+                      </Button>
+                    )}
+                    {reg.status === 'REJECTED' && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleStatusChange(reg.id, 'PENDING')}
+                        loading={loadingId === reg.id}
+                      >
+                        Reconsider
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>

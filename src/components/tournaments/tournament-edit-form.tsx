@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { updateTournament, deleteTournament } from '@/actions/tournament'
 import { 
   TOURNAMENT_STYLE_OPTIONS, 
@@ -16,9 +17,10 @@ import type { TournamentWithDetails } from '@/types'
 interface TournamentEditFormProps {
   tournament: TournamentWithDetails
   eventId: string
+  eventDates?: { start: Date; end: Date } | null
 }
 
-export function TournamentEditForm({ tournament, eventId }: TournamentEditFormProps) {
+export function TournamentEditForm({ tournament, eventId, eventDates }: TournamentEditFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -31,6 +33,7 @@ export function TournamentEditForm({ tournament, eventId }: TournamentEditFormPr
     setError(null)
 
     const formData = new FormData(e.currentTarget)
+    const startTimeValue = formData.get('startTime') as string
 
     const result = await updateTournament(tournament.id, {
       name: formData.get('name') as string,
@@ -39,6 +42,7 @@ export function TournamentEditForm({ tournament, eventId }: TournamentEditFormPr
       format: formData.get('format') as 'GROUP_STAGE' | 'KNOCKOUT' | 'DOUBLE_ELIMINATION' | 'GROUP_KNOCKOUT' | 'ROUND_ROBIN',
       matchDurationMinutes: parseInt(formData.get('matchDurationMinutes') as string),
       transitionTimeMinutes: parseInt(formData.get('transitionTimeMinutes') as string),
+      startTime: startTimeValue ? new Date(startTimeValue) : null,
     })
 
     setLoading(false)
@@ -137,6 +141,14 @@ export function TournamentEditForm({ tournament, eventId }: TournamentEditFormPr
                 </select>
               </div>
             </div>
+
+            <DateTimePicker
+              name="startTime"
+              label="Tournament Start Time"
+              defaultValue={tournament.startTime}
+              eventDates={eventDates}
+              helpText="Required for schedule generation"
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input

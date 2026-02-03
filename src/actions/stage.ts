@@ -15,7 +15,7 @@ export async function createStage(input: {
   tournamentId: string
   type: StageType
   order?: number
-  gapMinutesBefore?: number
+  bufferTimeMinutes?: number
   configuration?: Record<string, unknown>
 }): Promise<ActionResult<Stage>> {
   const session = await auth()
@@ -43,7 +43,7 @@ export async function createStage(input: {
         tournamentId: validated.data.tournamentId,
         type: validated.data.type,
         order: validated.data.order,
-        gapMinutesBefore: validated.data.gapMinutesBefore,
+        bufferTimeMinutes: validated.data.bufferTimeMinutes,
         configuration: validated.data.configuration as object | undefined,
       },
     })
@@ -57,7 +57,7 @@ export async function createStage(input: {
 
 export async function updateStage(
   stageId: string,
-  input: { name?: string; order?: number; gapMinutesBefore?: number; configuration?: Record<string, unknown> }
+  input: { name?: string; order?: number; bufferTimeMinutes?: number; configuration?: Record<string, unknown> }
 ): Promise<ActionResult<Stage>> {
   const session = await auth()
   if (!session?.user?.id) {

@@ -7,6 +7,7 @@ import { getStagesWithDetails } from '@/actions/stage'
 import { Button } from '@/components/ui/button'
 import { PitchManager } from '@/components/pitches/pitch-manager'
 import { StageBuilder } from '@/components/stages/stage-builder'
+import { ScheduleGenerator } from '@/components/schedule/schedule-generator'
 
 interface ConfigurePageProps {
   params: Promise<{ eventId: string; tournamentId: string }>
@@ -33,6 +34,15 @@ export default async function TournamentConfigurePage({ params }: ConfigurePageP
 
   const confirmedTeams = registrations.filter(r => r.status === 'CONFIRMED')
 
+  // Calculate schedule readiness
+  const hasStages = stages.length > 0
+  const hasPitches = pitches.filter(p => p.isSelected).length > 0
+  const hasTeamsAssigned = stages.some(s => 
+    s.groups.some(g => g.teamAssignments && g.teamAssignments.length > 0)
+  )
+  const hasStartTime = tournament.startTime !== null
+  const existingMatchCount = stages.reduce((sum, s) => sum + (s._count?.matches || 0), 0)
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -46,11 +56,29 @@ export default async function TournamentConfigurePage({ params }: ConfigurePageP
           <h1 className="text-3xl font-bold text-gray-900">{tournament.name}</h1>
           <p className="text-gray-500 mt-1">Tournament Configuration</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <Link href={`/events/${eventId}/tournaments/${tournamentId}`}>
             <Button variant="secondary">View Details</Button>
           </Link>
-          <Button disabled>Generate Schedule</Button>
+        </div>
+      </div>
+
+      {/* Schedule Generator */}
+      <div className="bg-white rounded-lg border p-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="font-semibold text-gray-900">Schedule Generation</h2>
+            <p className="text-sm text-gray-500">Generate match schedule based on your configuration</p>
+          </div>
+          <ScheduleGenerator
+            tournamentId={tournamentId}
+            eventId={eventId}
+            hasStages={hasStages}
+            hasPitches={hasPitches}
+            hasTeams={hasTeamsAssigned}
+            hasStartTime={hasStartTime}
+            existingMatchCount={existingMatchCount}
+          />
         </div>
       </div>
 

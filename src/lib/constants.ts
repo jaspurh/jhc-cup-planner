@@ -170,6 +170,7 @@ export function formatTournamentStyle(style: TournamentStyle | string): string {
  */
 export const STAGE_TYPE_LABELS: Record<StageType, string> = {
   GROUP_STAGE: 'Group Stage',
+  GSL_GROUPS: 'GSL Groups',
   ROUND_ROBIN: 'Round Robin',
   KNOCKOUT: 'Knockout',
   DOUBLE_ELIMINATION: 'Double Elimination',
@@ -267,6 +268,7 @@ export const CLUB_STATUS_CONFIG: Record<ClubStatus, StatusConfig> = {
  */
 export const STAGE_TYPE_OPTIONS: { value: StageType; label: string; description: string }[] = [
   { value: 'GROUP_STAGE', label: 'Group Stage', description: 'Round-robin matches within groups' },
+  { value: 'GSL_GROUPS', label: 'GSL Groups', description: 'Dual tournament format (4 teams, 5 matches per group)' },
   { value: 'ROUND_ROBIN', label: 'Round Robin', description: 'All teams play each other (no groups)' },
   { value: 'KNOCKOUT', label: 'Knockout', description: 'Single elimination bracket' },
   { value: 'DOUBLE_ELIMINATION', label: 'Double Elimination', description: 'Winners & losers brackets' },

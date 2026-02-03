@@ -196,7 +196,7 @@ model Stage {
   tournamentId       String
   type               StageType
   order              Int
-  gapMinutesBefore   Int       @default(0)
+  bufferTimeMinutes  Int       @default(0)
   
   // Stage configuration (JSON for flexibility)
   configuration      Json?
@@ -218,6 +218,7 @@ model Stage {
 
 enum StageType {
   GROUP_STAGE         // Round-robin within groups
+  GSL_GROUPS          // GSL/Dual tournament format within groups (4 teams, 5 matches)
   KNOCKOUT            // Single elimination bracket
   DOUBLE_ELIMINATION  // Winners and losers brackets
   ROUND_ROBIN         // All teams play each other (no groups)
@@ -430,6 +431,10 @@ model Match {
   // Teams (nullable for knockout matches before advancement)
   homeRegistrationId String?
   awayRegistrationId String?
+  
+  // Team source labels (e.g., "Winner Group A", "2nd Group B") for TBD teams
+  homeTeamSource    String?
+  awayTeamSource    String?
   
   // Match metadata
   matchNumber       Int?

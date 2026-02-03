@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { createTournament } from '@/actions/tournament'
 import { 
   TOURNAMENT_FORMAT_OPTIONS, 
@@ -16,9 +17,10 @@ import {
 interface TournamentFormProps {
   eventId: string
   eventName: string
+  eventDates?: { start: Date; end: Date } | null
 }
 
-export function TournamentForm({ eventId, eventName }: TournamentFormProps) {
+export function TournamentForm({ eventId, eventName, eventDates }: TournamentFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,6 +31,7 @@ export function TournamentForm({ eventId, eventName }: TournamentFormProps) {
     setError(null)
 
     const formData = new FormData(e.currentTarget)
+    const startTimeValue = formData.get('startTime') as string
     
     const result = await createTournament({
       eventId,
@@ -38,6 +41,7 @@ export function TournamentForm({ eventId, eventName }: TournamentFormProps) {
       format: formData.get('format') as 'GROUP_STAGE' | 'KNOCKOUT' | 'DOUBLE_ELIMINATION' | 'GROUP_KNOCKOUT' | 'ROUND_ROBIN',
       matchDurationMinutes: parseInt(formData.get('matchDuration') as string) || DEFAULT_TOURNAMENT_TIMING.matchDurationMinutes,
       transitionTimeMinutes: parseInt(formData.get('transitionTime') as string) || DEFAULT_TOURNAMENT_TIMING.transitionTimeMinutes,
+      startTime: startTimeValue ? new Date(startTimeValue) : undefined,
     })
 
     setLoading(false)
@@ -116,6 +120,13 @@ export function TournamentForm({ eventId, eventName }: TournamentFormProps) {
               </select>
             </div>
           </div>
+
+          <DateTimePicker
+            name="startTime"
+            label="Start Time (optional)"
+            eventDates={eventDates}
+            helpText="Required for schedule generation. Can be set later."
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <Input

@@ -133,6 +133,8 @@ export interface TournamentWithDetails {
     id: string
     name: string
     slug: string
+    startDate: Date
+    endDate: Date
   }
   stages: StageWithGroups[]
   teams: TeamRegistrationWithTeam[]
@@ -145,7 +147,7 @@ export interface StageWithGroups {
   name: string
   type: StageType
   order: number
-  gapMinutesBefore: number
+  bufferTimeMinutes: number
   configuration: unknown
   startTime: Date | null
   endTime: Date | null
@@ -222,6 +224,9 @@ export interface ScheduledMatch {
     id: string
     teamName: string
   } | null
+  // Source labels for TBD teams (e.g., "Winner Group A", "2nd Group B")
+  homeTeamSource: string | null
+  awayTeamSource: string | null
   result: {
     homeScore: number
     awayScore: number
