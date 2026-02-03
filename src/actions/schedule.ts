@@ -584,3 +584,64 @@ export async function previewTournamentSchedule(
     }
   }
 }
+
+// ==========================================
+// Match Time Update (Rescheduling)
+// ==========================================
+
+/**
+ * Update the scheduled time for a single match
+ */
+export async function updateMatchTime(
+  matchId: string,
+  newStartTime: Date
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const match = await db.match.findUnique({
+      where: { id: matchId },
+      include: {
+        stage: {
+          include: {
+            tournament: {
+              include: { event: true },
+            },
+          },
+        },
+      },
+    })
+
+    if (!match) {
+      return { success: false, error: 'Match not found' }
+    }
+
+    // Only allow rescheduling of scheduled matches
+    if (match.status !== 'SCHEDULED') {
+      return { success: false, error: 'Can only reschedule matches with SCHEDULED status' }
+    }
+
+    // Calculate new end time based on tournament duration
+    const tournament = match.stage.tournament
+    const durationMinutes = tournament.matchDurationMinutes
+    const newEndTime = new Date(newStartTime.getTime() + durationMinutes * 60000)
+
+    await db.match.update({
+      where: { id: matchId },
+      data: {
+        scheduledStartTime: newStartTime,
+        scheduledEndTime: newEndTime,
+      },
+    })
+
+    logger.info('Match rescheduled', { matchId, newStartTime, newEndTime })
+
+    revalidatePath(`/events/${tournament.event.id}/tournaments/${tournament.id}/schedule`)
+
+    return { success: true, data: { id: matchId } }
+  } catch (error) {
+    logger.error('Failed to reschedule match', { error, matchId })
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to reschedule match',
+    }
+  }
+}
