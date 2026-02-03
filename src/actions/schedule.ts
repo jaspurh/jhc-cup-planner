@@ -586,6 +586,76 @@ export async function previewTournamentSchedule(
 }
 
 // ==========================================
+// Reset TBD Team Assignments
+// ==========================================
+
+/**
+ * Reset team assignments for matches in non-group stages
+ * This clears incorrectly populated teams from knockout/elimination stages
+ * while preserving group stage matches entirely
+ */
+export async function resetDependentTeamAssignments(
+  tournamentId: string
+): Promise<ActionResult<{ resetCount: number }>> {
+  try {
+    const tournament = await db.tournament.findUnique({
+      where: { id: tournamentId },
+      include: {
+        event: true,
+        stages: {
+          select: { id: true, type: true },
+        },
+      },
+    })
+
+    if (!tournament) {
+      return { success: false, error: 'Tournament not found' }
+    }
+
+    // Only reset matches in NON-group stages (knockout, elimination, finals)
+    const groupStageTypes = ['GROUP_STAGE', 'GSL_GROUPS', 'ROUND_ROBIN']
+    const nonGroupStageIds = tournament.stages
+      .filter((s: { id: string; type: string }) => !groupStageTypes.includes(s.type))
+      .map((s: { id: string }) => s.id)
+
+    if (nonGroupStageIds.length === 0) {
+      return { success: true, data: { resetCount: 0 } }
+    }
+
+    // Reset team assignments in knockout/elimination stages only
+    const result = await db.match.updateMany({
+      where: {
+        stageId: { in: nonGroupStageIds },
+        OR: [
+          { homeTeamSource: { not: null } },
+          { awayTeamSource: { not: null } },
+        ],
+      },
+      data: {
+        homeRegistrationId: null,
+        awayRegistrationId: null,
+      },
+    })
+
+    logger.info('Reset dependent team assignments', { 
+      tournamentId, 
+      resetCount: result.count,
+      stagesReset: nonGroupStageIds.length,
+    })
+
+    revalidatePath(`/events/${tournament.event.id}/tournaments/${tournament.id}/schedule`)
+
+    return { success: true, data: { resetCount: result.count } }
+  } catch (error) {
+    logger.error('Failed to reset team assignments', { error, tournamentId })
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to reset assignments',
+    }
+  }
+}
+
+// ==========================================
 // Match Time Update (Rescheduling)
 // ==========================================
 

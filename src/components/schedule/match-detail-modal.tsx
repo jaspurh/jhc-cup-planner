@@ -303,18 +303,18 @@ export function MatchDetailModal({ match, isOpen, onClose }: MatchDetailModalPro
                     </div>
                   </div>
 
-                  {/* Penalties Toggle */}
-                  {homeScore === awayScore && (
-                    <div className="text-center">
-                      <button
-                        type="button"
-                        onClick={() => setShowPenalties(!showPenalties)}
-                        className="text-sm text-blue-600 hover:underline"
-                      >
-                        {showPenalties ? 'Remove penalty shootout' : '+ Add penalty shootout'}
-                      </button>
-                    </div>
-                  )}
+                  {/* Penalties Toggle - always takes space, visibility controlled */}
+                  <div className="text-center h-6">
+                    <button
+                      type="button"
+                      onClick={() => setShowPenalties(!showPenalties)}
+                      className={`text-sm text-blue-600 hover:underline transition-opacity ${
+                        homeScore === awayScore ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                      }`}
+                    >
+                      {showPenalties ? 'Remove penalty shootout' : '+ Add penalty shootout'}
+                    </button>
+                  </div>
 
                   {/* Penalties Entry */}
                   {showPenalties && homeScore === awayScore && (

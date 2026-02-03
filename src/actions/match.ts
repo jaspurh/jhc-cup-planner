@@ -78,8 +78,11 @@ export async function enterMatchResult(
         },
       })
 
-      // Handle knockout progression
+      // Handle knockout progression (within stage)
       await handleKnockoutProgression(tx, match, validated.homeScore, validated.awayScore, validated.homePenalties, validated.awayPenalties)
+
+      // Handle group stage advancement (to later stages)
+      await handleGroupStageAdvancement(tx, match)
 
       return matchResult
     })
@@ -180,6 +183,9 @@ export async function updateMatchResult(
         validated.homePenalties ?? match.result.homePenalties,
         validated.awayPenalties ?? match.result.awayPenalties
       )
+      
+      // Also check group stage advancement
+      await handleGroupStageAdvancement(db, match)
     }
 
     logger.info('Match result updated', { matchId: validated.matchId })
@@ -529,6 +535,238 @@ async function handleKnockoutProgression(
       }
     }
   }
+}
+
+// ==========================================
+// Helper: Handle Group Stage Advancement
+// ==========================================
+
+/**
+ * After a group match completes, check if all group matches are done
+ * If so, update matches in later stages that depend on group positions
+ */
+async function handleGroupStageAdvancement(
+  tx: PrismaTransaction | typeof db,
+  match: {
+    id: string
+    groupId?: string | null
+    stageId: string
+    stage: { type: string; tournamentId?: string; tournament?: { id: string } }
+  }
+): Promise<void> {
+  // Only handle group stages
+  const groupStageTypes = ['GROUP_STAGE', 'GSL_GROUPS', 'ROUND_ROBIN']
+  if (!groupStageTypes.includes(match.stage.type)) {
+    return
+  }
+
+  if (!match.groupId) {
+    return
+  }
+
+  // Get the group with all its matches
+  const group = await tx.group.findUnique({
+    where: { id: match.groupId },
+    include: {
+      stage: true,
+      teamAssignments: {
+        include: {
+          registration: {
+            include: { team: true },
+          },
+        },
+      },
+    },
+  })
+
+  if (!group) {
+    return
+  }
+
+  // Get all matches for this group
+  const groupMatches = await tx.match.findMany({
+    where: {
+      stageId: match.stageId,
+      groupId: match.groupId,
+    },
+    include: {
+      result: true,
+    },
+  })
+
+  // Check if all group matches are completed
+  const allCompleted = groupMatches.every(m => m.status === 'COMPLETED')
+  if (!allCompleted) {
+    return
+  }
+
+  // Calculate standings for this group
+  const standingsMap = new Map<string, {
+    registrationId: string
+    points: number
+    goalDifference: number
+    goalsFor: number
+  }>()
+
+  for (const assignment of group.teamAssignments) {
+    standingsMap.set(assignment.registrationId, {
+      registrationId: assignment.registrationId,
+      points: 0,
+      goalDifference: 0,
+      goalsFor: 0,
+    })
+  }
+
+  for (const gMatch of groupMatches) {
+    if (!gMatch.result || !gMatch.homeRegistrationId || !gMatch.awayRegistrationId) {
+      continue
+    }
+
+    const home = standingsMap.get(gMatch.homeRegistrationId)
+    const away = standingsMap.get(gMatch.awayRegistrationId)
+
+    if (!home || !away) continue
+
+    const { homeScore, awayScore } = gMatch.result
+
+    home.goalsFor += homeScore
+    away.goalsFor += awayScore
+    home.goalDifference += (homeScore - awayScore)
+    away.goalDifference += (awayScore - homeScore)
+
+    if (homeScore > awayScore) {
+      home.points += 3
+    } else if (awayScore > homeScore) {
+      away.points += 3
+    } else {
+      home.points += 1
+      away.points += 1
+    }
+  }
+
+  // Sort and get positions
+  const standings = Array.from(standingsMap.values()).sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points
+    if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference
+    return b.goalsFor - a.goalsFor
+  })
+
+  // Map position to registrationId
+  const positionMap: Record<number, string> = {}
+  standings.forEach((team, index) => {
+    positionMap[index + 1] = team.registrationId
+  })
+
+  // Get tournament ID
+  const tournamentId = match.stage.tournamentId || match.stage.tournament?.id
+  if (!tournamentId) {
+    return
+  }
+
+  // Find matches in the NEXT stage only (not all later stages)
+  // Pattern: "Group A 1st", "Group B 2nd", etc.
+  const groupName = group.name
+
+  // Find only the immediate next stage of this tournament
+  const nextStage = await tx.stage.findFirst({
+    where: {
+      tournamentId,
+      order: group.stage.order + 1,
+    },
+    include: {
+      matches: true,
+    },
+  })
+
+  if (!nextStage) {
+    return
+  }
+
+  const laterStages = [nextStage]
+
+  for (const laterStage of laterStages) {
+    for (const laterMatch of laterStage.matches) {
+      let updateData: { homeRegistrationId?: string; awayRegistrationId?: string } = {}
+
+      // Check homeTeamSource - pattern: "Group A 1st", "Group A 2nd", etc.
+      if (laterMatch.homeTeamSource) {
+        const homePosition = parseGroupPosition(laterMatch.homeTeamSource, groupName)
+        if (homePosition && positionMap[homePosition]) {
+          updateData.homeRegistrationId = positionMap[homePosition]
+        }
+      }
+
+      // Check awayTeamSource
+      if (laterMatch.awayTeamSource) {
+        const awayPosition = parseGroupPosition(laterMatch.awayTeamSource, groupName)
+        if (awayPosition && positionMap[awayPosition]) {
+          updateData.awayRegistrationId = positionMap[awayPosition]
+        }
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await tx.match.update({
+          where: { id: laterMatch.id },
+          data: updateData,
+        })
+        logger.info('Updated match from group advancement', {
+          matchId: laterMatch.id,
+          groupName,
+          updateData,
+        })
+      }
+    }
+  }
+}
+
+/**
+ * Parse group position from source string
+ * 
+ * Valid patterns (group advancement):
+ *   - "Group A 1st" -> 1
+ *   - "Group B 2nd" -> 2
+ *   - "Group A Winner" -> 1 (for GSL group overall winner)
+ *   - "Group A Runner-up" -> 2 (for GSL group overall runner-up)
+ * 
+ * Invalid patterns (within-stage match references - should NOT match):
+ *   - "Group A A1 Winner" -> null (this is winner of match A1, not group position)
+ *   - "Winner M1" -> null (knockout match reference)
+ */
+function parseGroupPosition(source: string, groupName: string): number | null {
+  // Normalize strings for comparison
+  const normalizedSource = source.toLowerCase().trim()
+  const normalizedGroup = groupName.toLowerCase().trim()
+
+  // Check if this source starts with this group name
+  // This prevents "Group A A1 Winner" from matching "Group A"
+  if (!normalizedSource.startsWith(normalizedGroup)) {
+    return null
+  }
+
+  // Get the part after the group name
+  const remainder = normalizedSource.slice(normalizedGroup.length).trim()
+
+  // Check for within-stage match references (should NOT match)
+  // Patterns like "a1 winner", "a2 loser", "m1", etc.
+  if (/^[a-z]?\d+\s*(winner|loser)/i.test(remainder)) {
+    return null
+  }
+
+  // Check for GSL-style group positions: "Winner" or "Runner-up" immediately after group name
+  if (/^winner$/i.test(remainder)) {
+    return 1
+  }
+  if (/^runner-?up$/i.test(remainder)) {
+    return 2
+  }
+
+  // Extract numeric position - patterns: "1st", "2nd", "3rd", "4th", etc.
+  const positionMatch = remainder.match(/^(\d+)(?:st|nd|rd|th)$/i)
+  if (positionMatch) {
+    return parseInt(positionMatch[1], 10)
+  }
+
+  return null
 }
 
 // ==========================================
