@@ -1,10 +1,13 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getTournament } from '@/actions/tournament'
-import { getTournamentSchedule, clearTournamentSchedule } from '@/actions/schedule'
+import { getTournamentSchedule } from '@/actions/schedule'
+import { getGroupStandings, type GroupStandings } from '@/actions/match'
+import { db } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { ScheduleView } from '@/components/schedule/schedule-view'
 import { ScheduleActions } from '@/components/schedule/schedule-actions'
+import { CompactStandingsDisplay } from '@/components/standings/group-standings'
 
 interface SchedulePageProps {
   params: Promise<{ eventId: string; tournamentId: string }>
@@ -24,6 +27,29 @@ export default async function TournamentSchedulePage({ params }: SchedulePagePro
 
   const tournament = tournamentResult.data
   const matches = scheduleResult.success ? scheduleResult.data || [] : []
+
+  // Get group stages for standings display
+  const groupStages = await db.stage.findMany({
+    where: {
+      tournamentId,
+      type: { in: ['GROUP_STAGE', 'GSL_GROUPS', 'ROUND_ROBIN'] },
+    },
+    orderBy: { order: 'asc' },
+    select: { id: true, name: true },
+  })
+
+  // Fetch standings server-side for each group stage
+  const stageStandings: Array<{ stageId: string; stageName: string; standings: GroupStandings[] }> = []
+  for (const stage of groupStages) {
+    const result = await getGroupStandings(stage.id)
+    if (result.success && result.data && result.data.length > 0) {
+      stageStandings.push({
+        stageId: stage.id,
+        stageName: stage.name,
+        standings: result.data,
+      })
+    }
+  }
 
   // Calculate stats
   const totalMatches = matches.length
@@ -58,6 +84,9 @@ export default async function TournamentSchedulePage({ params }: SchedulePagePro
           <p className="text-gray-500 mt-1">Match Schedule</p>
         </div>
         <div className="flex gap-2">
+          <Link href={`/events/${eventId}/tournaments/${tournamentId}/standings`}>
+            <Button variant="secondary">📊 Standings</Button>
+          </Link>
           <ScheduleActions 
             tournamentId={tournamentId}
             eventId={eventId}
@@ -123,6 +152,24 @@ export default async function TournamentSchedulePage({ params }: SchedulePagePro
               Scheduled: {scheduledMatches}
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Quick Standings (if group stages exist and have standings data) */}
+      {stageStandings.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-semibold text-gray-900">Quick Standings</h2>
+            <Link href={`/events/${eventId}/tournaments/${tournamentId}/standings`} className="text-sm text-blue-600 hover:underline">
+              View Full Standings →
+            </Link>
+          </div>
+          {stageStandings.map(({ stageId, stageName, standings }) => (
+            <div key={stageId}>
+              <h3 className="text-sm font-medium text-gray-600 mb-2">{stageName}</h3>
+              <CompactStandingsDisplay standings={standings} />
+            </div>
+          ))}
         </div>
       )}
 
