@@ -586,6 +586,78 @@ export async function previewTournamentSchedule(
 }
 
 // ==========================================
+// Reset TBD Team Assignments
+// ==========================================
+
+/**
+ * Reset team assignments for matches that depend on previous stages
+ * This clears teams from all stages after the first one (order > 0)
+ * Only affects matches with source labels that reference cross-stage positions
+ */
+export async function resetDependentTeamAssignments(
+  tournamentId: string
+): Promise<ActionResult<{ resetCount: number }>> {
+  try {
+    const tournament = await db.tournament.findUnique({
+      where: { id: tournamentId },
+      include: {
+        event: true,
+        stages: {
+          select: { id: true, type: true, order: true },
+          orderBy: { order: 'asc' },
+        },
+      },
+    })
+
+    if (!tournament) {
+      return { success: false, error: 'Tournament not found' }
+    }
+
+    // Get all stages after the first one (these may have cross-stage dependencies)
+    const laterStageIds = tournament.stages
+      .filter((s: { id: string; order: number }) => s.order > 0)
+      .map((s: { id: string }) => s.id)
+
+    if (laterStageIds.length === 0) {
+      return { success: true, data: { resetCount: 0 } }
+    }
+
+    // Reset team assignments for matches with cross-stage source labels
+    // Pattern: source labels that reference group positions (e.g., "Group A 1st", "Group B Winner")
+    // We filter by checking if source contains "Group" - these are cross-stage references
+    const result = await db.match.updateMany({
+      where: {
+        stageId: { in: laterStageIds },
+        OR: [
+          { homeTeamSource: { contains: 'Group' } },
+          { awayTeamSource: { contains: 'Group' } },
+        ],
+      },
+      data: {
+        homeRegistrationId: null,
+        awayRegistrationId: null,
+      },
+    })
+
+    logger.info('Reset dependent team assignments', { 
+      tournamentId, 
+      resetCount: result.count,
+      stagesChecked: laterStageIds.length,
+    })
+
+    revalidatePath(`/events/${tournament.event.id}/tournaments/${tournament.id}/schedule`)
+
+    return { success: true, data: { resetCount: result.count } }
+  } catch (error) {
+    logger.error('Failed to reset team assignments', { error, tournamentId })
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to reset assignments',
+    }
+  }
+}
+
+// ==========================================
 // Match Time Update (Rescheduling)
 // ==========================================
 

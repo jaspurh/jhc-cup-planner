@@ -1,10 +1,16 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getTournament } from '@/actions/tournament'
-import { getTournamentSchedule, clearTournamentSchedule } from '@/actions/schedule'
+import { getTournamentSchedule } from '@/actions/schedule'
+import { getGroupStandings, type GroupStandings } from '@/actions/match'
+import { getBracketStages, getBracketMatches } from '@/actions/bracket'
+import { db } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { ScheduleView } from '@/components/schedule/schedule-view'
 import { ScheduleActions } from '@/components/schedule/schedule-actions'
+import { CompactStandingsDisplay } from '@/components/standings/group-standings'
+import { BracketView } from '@/components/brackets'
+import { StageType, ScheduledMatch } from '@/types'
 
 interface SchedulePageProps {
   params: Promise<{ eventId: string; tournamentId: string }>
@@ -24,6 +30,66 @@ export default async function TournamentSchedulePage({ params }: SchedulePagePro
 
   const tournament = tournamentResult.data
   const matches = scheduleResult.success ? scheduleResult.data || [] : []
+
+  // Get group stages for standings display (regular groups and round robin, not GSL)
+  const groupStages = await db.stage.findMany({
+    where: {
+      tournamentId,
+      type: { in: ['GROUP_STAGE', 'ROUND_ROBIN'] },
+    },
+    orderBy: { order: 'asc' },
+    select: { id: true, name: true },
+  })
+
+  // Fetch standings server-side for each group stage
+  const stageStandings: Array<{ stageId: string; stageName: string; standings: GroupStandings[] }> = []
+  for (const stage of groupStages) {
+    const result = await getGroupStandings(stage.id)
+    if (result.success && result.data && result.data.length > 0) {
+      stageStandings.push({
+        stageId: stage.id,
+        stageName: stage.name,
+        standings: result.data,
+      })
+    }
+  }
+
+  // Fetch bracket stages for compact display (including GSL groups)
+  const bracketStagesResult = await getBracketStages(tournamentId)
+  const bracketStages = bracketStagesResult.success ? bracketStagesResult.data || [] : []
+
+  // Get matches for bracket stages (knockout, double elimination, final, AND GSL groups)
+  const bracketViews: Array<{
+    stageId: string
+    stageName: string
+    stageType: StageType
+    matches: ScheduledMatch[]
+    groups?: Array<{ id: string; name: string }>
+    matchesByGroup?: Record<string, ScheduledMatch[]>
+  }> = []
+
+  for (const stage of bracketStages) {
+    const matchesResult = await getBracketMatches(stage.id)
+    if (matchesResult.success && matchesResult.data && matchesResult.data.length > 0) {
+      const bracketEntry: typeof bracketViews[0] = {
+        stageId: stage.id,
+        stageName: stage.name,
+        stageType: stage.type,
+        matches: matchesResult.data,
+      }
+      
+      // For GSL groups, organize matches by group
+      if (stage.type === 'GSL_GROUPS' && stage.groups.length > 0) {
+        bracketEntry.groups = stage.groups
+        bracketEntry.matchesByGroup = {}
+        for (const group of stage.groups) {
+          bracketEntry.matchesByGroup[group.id] = matchesResult.data.filter(m => m.group?.id === group.id)
+        }
+      }
+      
+      bracketViews.push(bracketEntry)
+    }
+  }
 
   // Calculate stats
   const totalMatches = matches.length
@@ -58,6 +124,9 @@ export default async function TournamentSchedulePage({ params }: SchedulePagePro
           <p className="text-gray-500 mt-1">Match Schedule</p>
         </div>
         <div className="flex gap-2">
+          <Link href={`/events/${eventId}/tournaments/${tournamentId}/standings`}>
+            <Button variant="secondary">📊 Standings</Button>
+          </Link>
           <ScheduleActions 
             tournamentId={tournamentId}
             eventId={eventId}
@@ -123,6 +192,70 @@ export default async function TournamentSchedulePage({ params }: SchedulePagePro
               Scheduled: {scheduledMatches}
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Quick Standings (if group stages exist and have standings data) */}
+      {stageStandings.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-semibold text-gray-900">Quick Standings</h2>
+            <Link href={`/events/${eventId}/tournaments/${tournamentId}/standings`} className="text-sm text-blue-600 hover:underline">
+              View Full Standings →
+            </Link>
+          </div>
+          {stageStandings.map(({ stageId, stageName, standings }) => (
+            <div key={stageId}>
+              <h3 className="text-sm font-medium text-gray-600 mb-2">{stageName}</h3>
+              <CompactStandingsDisplay standings={standings} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bracket Progress (GSL groups, knockout, double elimination, finals) */}
+      {bracketViews.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-semibold text-gray-900">Bracket Progress</h2>
+            <Link href={`/events/${eventId}/tournaments/${tournamentId}/standings`} className="text-sm text-blue-600 hover:underline">
+              View Full Brackets →
+            </Link>
+          </div>
+          {bracketViews.map(({ stageId, stageName, stageType, matches, groups, matchesByGroup }) => (
+            <div key={stageId} className="bg-white rounded-lg border overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b">
+                <h3 className="font-medium text-gray-900">{stageName}</h3>
+              </div>
+              <div className="overflow-x-auto">
+                {stageType === 'GSL_GROUPS' && groups && matchesByGroup ? (
+                  // GSL: Show bracket for each group
+                  <div className="divide-y divide-gray-100">
+                    {groups.map(group => {
+                      const groupMatches = matchesByGroup[group.id] || []
+                      if (groupMatches.length === 0) return null
+                      return (
+                        <BracketView 
+                          key={group.id}
+                          matches={groupMatches} 
+                          stageType={stageType}
+                          groupName={group.name}
+                          compact={true}
+                        />
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <BracketView 
+                    matches={matches} 
+                    stageType={stageType}
+                    stageName={stageName}
+                    compact={true}
+                  />
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
