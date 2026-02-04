@@ -90,7 +90,9 @@ export async function enterMatchResult(
     logger.info('Match result entered', { 
       matchId: validated.matchId, 
       homeScore: validated.homeScore, 
-      awayScore: validated.awayScore 
+      awayScore: validated.awayScore,
+      homePenalties: validated.homePenalties,
+      awayPenalties: validated.awayPenalties,
     })
 
     const tournament = match.stage.tournament
@@ -439,6 +441,7 @@ async function handleKnockoutProgression(
     homeRegistrationId: string | null
     awayRegistrationId: string | null
     stageId: string
+    groupId?: string | null
     stage: { type: string }
   },
   homeScore: number,
@@ -446,13 +449,13 @@ async function handleKnockoutProgression(
   homePenalties?: number | null,
   awayPenalties?: number | null
 ): Promise<void> {
-  // Only handle knockout/elimination stages
-  const knockoutTypes = ['KNOCKOUT', 'DOUBLE_ELIMINATION', 'FINAL']
-  if (!knockoutTypes.includes(match.stage.type)) {
+  // Handle knockout stages AND GSL groups (which have internal winner/loser progression)
+  const progressionTypes = ['KNOCKOUT', 'DOUBLE_ELIMINATION', 'FINAL', 'GSL_GROUPS']
+  if (!progressionTypes.includes(match.stage.type)) {
     return
   }
 
-  // Determine winner
+  // Determine winner and loser
   let winnerId: string | null = null
   let loserId: string | null = null
 
@@ -480,29 +483,78 @@ async function handleKnockoutProgression(
     return
   }
 
-  // Find matches that depend on this match's winner
-  // Convention: homeTeamSource or awayTeamSource contains "Winner M{matchNumber}" or similar
+  // Find matches that depend on this match's winner or loser
+  // For GSL: scope to same group. For knockout: scope to same stage
+  const whereClause = match.stage.type === 'GSL_GROUPS' && match.groupId
+    ? { stageId: match.stageId, groupId: match.groupId }
+    : { stageId: match.stageId }
+
   const dependentMatches = await tx.match.findMany({
     where: {
-      stageId: match.stageId,
+      ...whereClause,
       OR: [
         { homeTeamSource: { contains: `Winner` } },
         { awayTeamSource: { contains: `Winner` } },
+        { homeTeamSource: { contains: `Loser` } },
+        { awayTeamSource: { contains: `Loser` } },
       ],
     },
   })
 
-  // Match pattern: "Winner M1", "Winner Match 1", etc.
-  const matchIdPattern = new RegExp(`Winner.*${match.bracketPosition}|Winner.*M${match.bracketPosition}`, 'i')
+  // Build patterns for winner and loser matching
+  // For GSL groups, the source uses group short label + match number (e.g., "A1", "A2")
+  // bracketPosition is "M1", "M2" - we need to extract the match number
+  const bracketPos = match.bracketPosition || ''
+  
+  // Extract match number from bracketPosition (e.g., "M1" -> "1", "M2" -> "2")
+  const matchNumberMatch = bracketPos.match(/M?(\d+)/)
+  const matchNumber = matchNumberMatch ? matchNumberMatch[1] : bracketPos
+  
+  // For GSL groups, also get the group short label
+  let gslMatchId = ''
+  if (match.stage.type === 'GSL_GROUPS' && match.groupId) {
+    const group = await tx.group.findUnique({
+      where: { id: match.groupId },
+      select: { name: true },
+    })
+    if (group) {
+      // Group name like "Group A" -> short label "A"
+      const shortLabel = group.name.replace(/^Group\s*/i, '').charAt(0).toUpperCase()
+      gslMatchId = `${shortLabel}${matchNumber}` // e.g., "A1", "A2"
+    }
+  }
+  
+  // Build regex patterns - for GSL use the group-specific ID, otherwise use bracketPosition
+  const matchId = gslMatchId || bracketPos
+  const winnerPattern = new RegExp(`${matchId}\\s*Winner|Winner.*${matchId}`, 'i')
+  const loserPattern = new RegExp(`${matchId}\\s*Loser|Loser.*${matchId}`, 'i')
+  
+  logger.info('Looking for dependent matches', {
+    bracketPosition: bracketPos,
+    matchId,
+    gslMatchId,
+    dependentCount: dependentMatches.length,
+  })
   
   for (const depMatch of dependentMatches) {
     let updateData: { homeRegistrationId?: string; awayRegistrationId?: string } = {}
     
-    if (depMatch.homeTeamSource && matchIdPattern.test(depMatch.homeTeamSource)) {
+    // Check for winner references
+    if (depMatch.homeTeamSource && winnerPattern.test(depMatch.homeTeamSource)) {
       updateData.homeRegistrationId = winnerId
     }
-    if (depMatch.awayTeamSource && matchIdPattern.test(depMatch.awayTeamSource)) {
+    if (depMatch.awayTeamSource && winnerPattern.test(depMatch.awayTeamSource)) {
       updateData.awayRegistrationId = winnerId
+    }
+    
+    // Check for loser references (GSL groups and double elimination use losers)
+    if (loserId) {
+      if (depMatch.homeTeamSource && loserPattern.test(depMatch.homeTeamSource)) {
+        updateData.homeRegistrationId = loserId
+      }
+      if (depMatch.awayTeamSource && loserPattern.test(depMatch.awayTeamSource)) {
+        updateData.awayRegistrationId = loserId
+      }
     }
 
     if (Object.keys(updateData).length > 0) {
@@ -510,31 +562,42 @@ async function handleKnockoutProgression(
         where: { id: depMatch.id },
         data: updateData,
       })
+      logger.info('Updated dependent match', {
+        matchId: depMatch.id,
+        sourceMatchId: matchId,
+        homeSource: depMatch.homeTeamSource,
+        awaySource: depMatch.awayTeamSource,
+        updateData,
+      })
     }
   }
+}
 
-  // Also check for loser bracket matches in double elimination
-  if (match.stage.type === 'DOUBLE_ELIMINATION' && loserId) {
-    const loserPattern = new RegExp(`Loser.*${match.bracketPosition}|Loser.*M${match.bracketPosition}`, 'i')
-    
-    for (const depMatch of dependentMatches) {
-      let updateData: { homeRegistrationId?: string; awayRegistrationId?: string } = {}
-      
-      if (depMatch.homeTeamSource && loserPattern.test(depMatch.homeTeamSource)) {
-        updateData.homeRegistrationId = loserId
-      }
-      if (depMatch.awayTeamSource && loserPattern.test(depMatch.awayTeamSource)) {
-        updateData.awayRegistrationId = loserId
-      }
+// ==========================================
+// Helper: Get Match Winner
+// ==========================================
 
-      if (Object.keys(updateData).length > 0) {
-        await tx.match.update({
-          where: { id: depMatch.id },
-          data: updateData,
-        })
-      }
+/**
+ * Determine the winner of a completed match
+ * Returns the registrationId of the winning team, or null if draw
+ */
+function getMatchWinner(
+  match: { homeRegistrationId: string | null; awayRegistrationId: string | null },
+  result: { homeScore: number; awayScore: number; homePenalties?: number | null; awayPenalties?: number | null }
+): string | null {
+  if (result.homeScore > result.awayScore) {
+    return match.homeRegistrationId
+  } else if (result.awayScore > result.homeScore) {
+    return match.awayRegistrationId
+  } else if (result.homePenalties != null && result.awayPenalties != null) {
+    // Decided by penalties
+    if (result.homePenalties > result.awayPenalties) {
+      return match.homeRegistrationId
+    } else if (result.awayPenalties > result.homePenalties) {
+      return match.awayRegistrationId
     }
   }
+  return null
 }
 
 // ==========================================
@@ -542,8 +605,10 @@ async function handleKnockoutProgression(
 // ==========================================
 
 /**
- * After a group match completes, check if all group matches are done
- * If so, update matches in later stages that depend on group positions
+ * After a group match completes, check if the group positions are determined
+ * For GSL: after M3 and M5 are complete
+ * For regular groups: after all matches are complete
+ * Then update matches in the next stage that depend on group positions
  */
 async function handleGroupStageAdvancement(
   tx: PrismaTransaction | typeof db,
@@ -594,68 +659,109 @@ async function handleGroupStageAdvancement(
     },
   })
 
-  // Check if all group matches are completed
-  const allCompleted = groupMatches.every(m => m.status === 'COMPLETED')
-  if (!allCompleted) {
-    return
-  }
+  // Map position to registrationId
+  const positionMap: Record<number, string> = {}
 
-  // Calculate standings for this group
-  const standingsMap = new Map<string, {
-    registrationId: string
-    points: number
-    goalDifference: number
-    goalsFor: number
-  }>()
+  // For GSL groups, winner is determined by bracket results, not points
+  if (match.stage.type === 'GSL_GROUPS') {
+    // GSL format: M3 winner = 1st place (Winner), M5 winner = 2nd place (Runner-up)
+    const m3 = groupMatches.find(m => m.bracketPosition === 'M3')
+    const m5 = groupMatches.find(m => m.bracketPosition === 'M5')
 
-  for (const assignment of group.teamAssignments) {
-    standingsMap.set(assignment.registrationId, {
-      registrationId: assignment.registrationId,
-      points: 0,
-      goalDifference: 0,
-      goalsFor: 0,
+    // Check if M3 and M5 are completed (these determine the final positions)
+    if (!m3 || m3.status !== 'COMPLETED' || !m3.result) {
+      return
+    }
+    if (!m5 || m5.status !== 'COMPLETED' || !m5.result) {
+      return
+    }
+
+    // Determine M3 winner (1st place / Group Winner)
+    const m3Winner = getMatchWinner(m3, m3.result)
+    if (m3Winner) {
+      positionMap[1] = m3Winner
+    }
+
+    // Determine M5 winner (2nd place / Runner-up)
+    const m5Winner = getMatchWinner(m5, m5.result)
+    if (m5Winner) {
+      positionMap[2] = m5Winner
+    }
+
+    logger.info('GSL group advancement calculated', {
+      groupId: match.groupId,
+      groupName: group.name,
+      winner: positionMap[1],
+      runnerUp: positionMap[2],
+    })
+  } else {
+    // Regular group stages: use points-based standings
+    // Check if all group matches are completed
+    const allCompleted = groupMatches.every(m => m.status === 'COMPLETED')
+    if (!allCompleted) {
+      return
+    }
+
+    // Calculate standings for this group
+    const standingsMap = new Map<string, {
+      registrationId: string
+      points: number
+      goalDifference: number
+      goalsFor: number
+    }>()
+
+    for (const assignment of group.teamAssignments) {
+      standingsMap.set(assignment.registrationId, {
+        registrationId: assignment.registrationId,
+        points: 0,
+        goalDifference: 0,
+        goalsFor: 0,
+      })
+    }
+
+    for (const gMatch of groupMatches) {
+      if (!gMatch.result || !gMatch.homeRegistrationId || !gMatch.awayRegistrationId) {
+        continue
+      }
+
+      const home = standingsMap.get(gMatch.homeRegistrationId)
+      const away = standingsMap.get(gMatch.awayRegistrationId)
+
+      if (!home || !away) continue
+
+      const { homeScore, awayScore } = gMatch.result
+
+      home.goalsFor += homeScore
+      away.goalsFor += awayScore
+      home.goalDifference += (homeScore - awayScore)
+      away.goalDifference += (awayScore - homeScore)
+
+      if (homeScore > awayScore) {
+        home.points += 3
+      } else if (awayScore > homeScore) {
+        away.points += 3
+      } else {
+        home.points += 1
+        away.points += 1
+      }
+    }
+
+    // Sort and get positions
+    const standings = Array.from(standingsMap.values()).sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points
+      if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference
+      return b.goalsFor - a.goalsFor
+    })
+
+    standings.forEach((team, index) => {
+      positionMap[index + 1] = team.registrationId
     })
   }
 
-  for (const gMatch of groupMatches) {
-    if (!gMatch.result || !gMatch.homeRegistrationId || !gMatch.awayRegistrationId) {
-      continue
-    }
-
-    const home = standingsMap.get(gMatch.homeRegistrationId)
-    const away = standingsMap.get(gMatch.awayRegistrationId)
-
-    if (!home || !away) continue
-
-    const { homeScore, awayScore } = gMatch.result
-
-    home.goalsFor += homeScore
-    away.goalsFor += awayScore
-    home.goalDifference += (homeScore - awayScore)
-    away.goalDifference += (awayScore - homeScore)
-
-    if (homeScore > awayScore) {
-      home.points += 3
-    } else if (awayScore > homeScore) {
-      away.points += 3
-    } else {
-      home.points += 1
-      away.points += 1
-    }
+  // If no positions determined, exit
+  if (Object.keys(positionMap).length === 0) {
+    return
   }
-
-  // Sort and get positions
-  const standings = Array.from(standingsMap.values()).sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points
-    if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference
-    return b.goalsFor - a.goalsFor
-  })
-
-  // Map position to registrationId
-  const positionMap: Record<number, string> = {}
-  standings.forEach((team, index) => {
-    positionMap[index + 1] = team.registrationId
-  })
 
   // Get tournament ID
   const tournamentId = match.stage.tournamentId || match.stage.tournament?.id
@@ -779,18 +885,25 @@ async function clearKnockoutProgression(
     id: string
     bracketPosition: string | null
     stageId: string
+    groupId?: string | null
     stage: { type: string }
   }
 ): Promise<void> {
-  const knockoutTypes = ['KNOCKOUT', 'DOUBLE_ELIMINATION', 'FINAL']
-  if (!knockoutTypes.includes(match.stage.type)) {
+  // Handle knockout stages AND GSL groups
+  const progressionTypes = ['KNOCKOUT', 'DOUBLE_ELIMINATION', 'FINAL', 'GSL_GROUPS']
+  if (!progressionTypes.includes(match.stage.type)) {
     return
   }
+
+  // For GSL: scope to same group. For knockout: scope to same stage
+  const whereClause = match.stage.type === 'GSL_GROUPS' && match.groupId
+    ? { stageId: match.stageId, groupId: match.groupId }
+    : { stageId: match.stageId }
 
   // Find matches that might have been populated from this match
   const dependentMatches = await tx.match.findMany({
     where: {
-      stageId: match.stageId,
+      ...whereClause,
       OR: [
         { homeTeamSource: { contains: `Winner` } },
         { awayTeamSource: { contains: `Winner` } },
@@ -800,7 +913,25 @@ async function clearKnockoutProgression(
     },
   })
 
-  const matchPattern = new RegExp(`(Winner|Loser).*${match.bracketPosition}|M${match.bracketPosition}`, 'i')
+  const bracketPos = match.bracketPosition || ''
+  
+  // Extract match number and build GSL-specific ID if needed
+  const matchNumberMatch = bracketPos.match(/M?(\d+)/)
+  const matchNumber = matchNumberMatch ? matchNumberMatch[1] : bracketPos
+  
+  let matchId = bracketPos
+  if (match.stage.type === 'GSL_GROUPS' && match.groupId) {
+    const group = await tx.group.findUnique({
+      where: { id: match.groupId },
+      select: { name: true },
+    })
+    if (group) {
+      const shortLabel = group.name.replace(/^Group\s*/i, '').charAt(0).toUpperCase()
+      matchId = `${shortLabel}${matchNumber}`
+    }
+  }
+  
+  const matchPattern = new RegExp(`${matchId}\\s*(Winner|Loser)|(Winner|Loser).*${matchId}`, 'i')
 
   for (const depMatch of dependentMatches) {
     let updateData: { homeRegistrationId?: null; awayRegistrationId?: null } = {}

@@ -88,12 +88,16 @@ export function MatchDetailModal({ match, isOpen, onClose }: MatchDetailModalPro
   const handleEnterResult = () => {
     setError(null)
     startTransition(async () => {
+      // When showPenalties is true, treat empty fields as 0
       const resultData = {
         matchId: match.id,
         homeScore,
         awayScore,
-        ...(showPenalties && homePenalties !== '' && awayPenalties !== '' 
-          ? { homePenalties: homePenalties as number, awayPenalties: awayPenalties as number }
+        ...(showPenalties
+          ? { 
+              homePenalties: homePenalties === '' ? 0 : homePenalties, 
+              awayPenalties: awayPenalties === '' ? 0 : awayPenalties 
+            }
           : {}
         ),
       }

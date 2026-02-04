@@ -108,13 +108,8 @@ export function ScheduleActions({ tournamentId, eventId, matchCount }: ScheduleA
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {message && (
-        <div className="text-sm text-green-600 bg-green-50 px-3 py-1 rounded">
-          {message}
-        </div>
-      )}
-      <div className="flex gap-2">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Link href={`/events/${eventId}/tournaments/${tournamentId}/configure`}>
           <Button variant="secondary">Edit Configuration</Button>
         </Link>
@@ -139,6 +134,18 @@ export function ScheduleActions({ tournamentId, eventId, matchCount }: ScheduleA
           </>
         )}
       </div>
+      
+      {/* Messages appear below buttons */}
+      {message && (
+        <div className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded border border-green-200">
+          ✓ {message}
+        </div>
+      )}
+      {error && !showClearConfirm && !showResetConfirm && (
+        <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200">
+          {error}
+        </div>
+      )}
     </div>
   )
 }

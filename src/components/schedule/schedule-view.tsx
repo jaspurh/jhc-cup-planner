@@ -437,9 +437,9 @@ function MatchCard({ match, showGroup = true, showStage = false, showPitch = tru
           {match.result && (
             <div className="flex-shrink-0 font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded">
               {match.result.homeScore} - {match.result.awayScore}
-              {match.result.homePenalties !== null && (
+              {match.result.homePenalties != null && match.result.awayPenalties != null && (
                 <span className="text-xs text-gray-500 ml-1">
-                  ({match.result.homePenalties}-{match.result.awayPenalties})
+                  (p: {match.result.homePenalties}-{match.result.awayPenalties})
                 </span>
               )}
             </div>

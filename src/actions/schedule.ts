@@ -590,9 +590,9 @@ export async function previewTournamentSchedule(
 // ==========================================
 
 /**
- * Reset team assignments for matches in non-group stages
- * This clears incorrectly populated teams from knockout/elimination stages
- * while preserving group stage matches entirely
+ * Reset team assignments for matches that depend on previous stages
+ * This clears teams from all stages after the first one (order > 0)
+ * Only affects matches with source labels that reference cross-stage positions
  */
 export async function resetDependentTeamAssignments(
   tournamentId: string
@@ -603,7 +603,8 @@ export async function resetDependentTeamAssignments(
       include: {
         event: true,
         stages: {
-          select: { id: true, type: true },
+          select: { id: true, type: true, order: true },
+          orderBy: { order: 'asc' },
         },
       },
     })
@@ -612,23 +613,24 @@ export async function resetDependentTeamAssignments(
       return { success: false, error: 'Tournament not found' }
     }
 
-    // Only reset matches in NON-group stages (knockout, elimination, finals)
-    const groupStageTypes = ['GROUP_STAGE', 'GSL_GROUPS', 'ROUND_ROBIN']
-    const nonGroupStageIds = tournament.stages
-      .filter((s: { id: string; type: string }) => !groupStageTypes.includes(s.type))
+    // Get all stages after the first one (these may have cross-stage dependencies)
+    const laterStageIds = tournament.stages
+      .filter((s: { id: string; order: number }) => s.order > 0)
       .map((s: { id: string }) => s.id)
 
-    if (nonGroupStageIds.length === 0) {
+    if (laterStageIds.length === 0) {
       return { success: true, data: { resetCount: 0 } }
     }
 
-    // Reset team assignments in knockout/elimination stages only
+    // Reset team assignments for matches with cross-stage source labels
+    // Pattern: source labels that reference group positions (e.g., "Group A 1st", "Group B Winner")
+    // We filter by checking if source contains "Group" - these are cross-stage references
     const result = await db.match.updateMany({
       where: {
-        stageId: { in: nonGroupStageIds },
+        stageId: { in: laterStageIds },
         OR: [
-          { homeTeamSource: { not: null } },
-          { awayTeamSource: { not: null } },
+          { homeTeamSource: { contains: 'Group' } },
+          { awayTeamSource: { contains: 'Group' } },
         ],
       },
       data: {
@@ -640,7 +642,7 @@ export async function resetDependentTeamAssignments(
     logger.info('Reset dependent team assignments', { 
       tournamentId, 
       resetCount: result.count,
-      stagesReset: nonGroupStageIds.length,
+      stagesChecked: laterStageIds.length,
     })
 
     revalidatePath(`/events/${tournament.event.id}/tournaments/${tournament.id}/schedule`)

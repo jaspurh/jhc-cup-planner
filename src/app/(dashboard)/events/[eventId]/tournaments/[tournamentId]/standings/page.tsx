@@ -2,8 +2,11 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getTournament } from '@/actions/tournament'
 import { getGroupStandings, type GroupStandings } from '@/actions/match'
+import { getBracketStages, getBracketMatches, getGSLGroupMatches } from '@/actions/bracket'
 import { db } from '@/lib/db'
 import { Button } from '@/components/ui/button'
+import { BracketView, supportsBracketView } from '@/components/brackets'
+import { StageType, ScheduledMatch } from '@/types'
 
 interface StandingsPageProps {
   params: Promise<{ eventId: string; tournamentId: string }>
@@ -20,24 +23,55 @@ export default async function TournamentStandingsPage({ params }: StandingsPageP
 
   const tournament = tournamentResult.data
 
-  // Get all group stages for this tournament
-  const stages = await db.stage.findMany({
+  // Get all group stages for this tournament (for standings tables)
+  const groupStages = await db.stage.findMany({
     where: {
       tournamentId,
-      type: { in: ['GROUP_STAGE', 'GSL_GROUPS', 'ROUND_ROBIN'] },
+      type: { in: ['GROUP_STAGE', 'ROUND_ROBIN'] },
     },
     orderBy: { order: 'asc' },
   })
 
-  // Get standings for each stage
-  const stageStandings: Array<{ stage: typeof stages[0]; standings: GroupStandings[] }> = []
+  // Get standings for regular group stages
+  const stageStandings: Array<{ stage: typeof groupStages[0]; standings: GroupStandings[] }> = []
   
-  for (const stage of stages) {
+  for (const stage of groupStages) {
     const result = await getGroupStandings(stage.id)
     if (result.success && result.data) {
       stageStandings.push({ stage, standings: result.data })
     }
   }
+
+  // Get bracket stages (GSL, Knockout, Double Elimination, Final)
+  const bracketStagesResult = await getBracketStages(tournamentId)
+  const bracketStages = bracketStagesResult.success ? bracketStagesResult.data || [] : []
+
+  // Fetch matches for each bracket stage
+  const bracketData: Array<{
+    stage: typeof bracketStages[0]
+    matches: ScheduledMatch[]
+    matchesByGroup?: Record<string, ScheduledMatch[]>
+  }> = []
+
+  for (const stage of bracketStages) {
+    const matchesResult = await getBracketMatches(stage.id)
+    if (matchesResult.success && matchesResult.data) {
+      const matches = matchesResult.data
+      
+      // For GSL stages, also group by group
+      if (stage.type === 'GSL_GROUPS' && stage.groups.length > 0) {
+        const matchesByGroup: Record<string, ScheduledMatch[]> = {}
+        for (const group of stage.groups) {
+          matchesByGroup[group.id] = matches.filter(m => m.group?.id === group.id)
+        }
+        bracketData.push({ stage, matches, matchesByGroup })
+      } else {
+        bracketData.push({ stage, matches })
+      }
+    }
+  }
+
+  const hasContent = stageStandings.length > 0 || bracketData.length > 0
 
   return (
     <div className="space-y-8">
@@ -59,18 +93,19 @@ export default async function TournamentStandingsPage({ params }: StandingsPageP
         </div>
       </div>
 
-      {stageStandings.length === 0 ? (
+      {!hasContent ? (
         <div className="bg-white rounded-lg border p-8 text-center">
           <div className="max-w-md mx-auto">
             <div className="text-6xl mb-4">📊</div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">No Group Stages</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">No Stages Yet</h2>
             <p className="text-gray-500 mb-6">
-              This tournament doesn&apos;t have any group stages with standings.
+              This tournament doesn&apos;t have any stages with standings or brackets.
             </p>
           </div>
         </div>
       ) : (
         <div className="space-y-8">
+          {/* Regular Group Stage Standings (tables) */}
           {stageStandings.map(({ stage, standings }) => (
             <div key={stage.id}>
               <h2 className="text-xl font-semibold text-gray-900 mb-4">{stage.name}</h2>
@@ -84,6 +119,54 @@ export default async function TournamentStandingsPage({ params }: StandingsPageP
                   {standings.map(group => (
                     <GroupTable key={group.groupId} group={group} />
                   ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Bracket Stages (GSL, Knockout, Double Elimination) */}
+          {bracketData.map(({ stage, matches, matchesByGroup }) => (
+            <div key={stage.id} className="bg-white rounded-lg border overflow-hidden">
+              <div className="px-6 py-4 bg-gray-50 border-b">
+                <h2 className="text-xl font-semibold text-gray-900">{stage.name}</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {stage.type === 'GSL_GROUPS' && 'GSL Format Bracket'}
+                  {stage.type === 'KNOCKOUT' && 'Single Elimination Bracket'}
+                  {stage.type === 'DOUBLE_ELIMINATION' && 'Double Elimination Bracket'}
+                  {stage.type === 'FINAL' && 'Finals'}
+                </p>
+              </div>
+              
+              {matches.length === 0 ? (
+                <div className="p-6 text-center text-gray-500">
+                  No matches scheduled yet
+                </div>
+              ) : stage.type === 'GSL_GROUPS' && matchesByGroup ? (
+                // GSL: Show bracket for each group
+                <div className="divide-y divide-gray-200">
+                  {stage.groups.map(group => {
+                    const groupMatches = matchesByGroup[group.id] || []
+                    if (groupMatches.length === 0) return null
+                    return (
+                      <div key={group.id} className="p-4">
+                        <BracketView 
+                          matches={groupMatches} 
+                          stageType={stage.type as StageType}
+                          stageName={stage.name}
+                          groupName={group.name}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                // Knockout/Double Elimination: Single bracket view
+                <div className="p-4">
+                  <BracketView 
+                    matches={matches} 
+                    stageType={stage.type as StageType}
+                    stageName={stage.name}
+                  />
                 </div>
               )}
             </div>
