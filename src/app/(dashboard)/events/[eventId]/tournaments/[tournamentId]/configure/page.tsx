@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { PitchManager } from '@/components/pitches/pitch-manager'
 import { StageBuilder } from '@/components/stages/stage-builder'
 import { ScheduleGenerator } from '@/components/schedule/schedule-generator'
+import { TournamentFlowDiagram } from '@/components/tournaments/tournament-flow-diagram'
 
 interface ConfigurePageProps {
   params: Promise<{ eventId: string; tournamentId: string }>
@@ -110,6 +111,29 @@ export default async function TournamentConfigurePage({ params }: ConfigurePageP
         eventId={tournament.eventId}
         initialPitches={pitches}
       />
+
+      {/* Tournament Flow Overview */}
+      {stages.length > 0 && (
+        <div className="bg-white rounded-lg border p-4">
+          <h2 className="font-semibold text-gray-900 mb-1">Tournament Flow</h2>
+          <p className="text-sm text-gray-500 mb-4">Stages and advancement pipeline</p>
+          <TournamentFlowDiagram
+            stages={stages.map(s => ({
+              id: s.id,
+              name: s.name,
+              type: s.type,
+              order: s.order,
+              configuration: s.configuration as Record<string, unknown> | null,
+              groups: s.groups.map(g => ({
+                id: g.id,
+                name: g.name,
+                teams: g.teamAssignments ?? [],
+              })),
+              matchCount: s._count?.matches ?? 0,
+            }))}
+          />
+        </div>
+      )}
 
       {/* Stage Builder */}
       <StageBuilder

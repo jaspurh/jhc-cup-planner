@@ -483,79 +483,75 @@ async function handleKnockoutProgression(
     return
   }
 
-  // Find matches that depend on this match's winner or loser
-  // For GSL: scope to same group. For knockout: scope to same stage
-  const whereClause = match.stage.type === 'GSL_GROUPS' && match.groupId
-    ? { stageId: match.stageId, groupId: match.groupId }
-    : { stageId: match.stageId }
-
-  const dependentMatches = await tx.match.findMany({
-    where: {
-      ...whereClause,
-      OR: [
-        { homeTeamSource: { contains: `Winner` } },
-        { awayTeamSource: { contains: `Winner` } },
-        { homeTeamSource: { contains: `Loser` } },
-        { awayTeamSource: { contains: `Loser` } },
-      ],
-    },
+  // Strategy: prefer explicit dependency IDs (populated for newly generated schedules).
+  // Fall back to legacy string-pattern search for schedules generated before the migration.
+  let dependentMatches = await tx.match.findMany({
+    where: { dependsOnMatchIds: { has: match.id } },
   })
 
-  // Build patterns for winner and loser matching
-  // For GSL groups, the source uses group short label + match number (e.g., "A1", "A2")
-  // bracketPosition is "M1", "M2" - we need to extract the match number
-  const bracketPos = match.bracketPosition || ''
-  
-  // Extract match number from bracketPosition (e.g., "M1" -> "1", "M2" -> "2")
-  const matchNumberMatch = bracketPos.match(/M?(\d+)/)
-  const matchNumber = matchNumberMatch ? matchNumberMatch[1] : bracketPos
-  
-  // For GSL groups, also get the group short label
-  let gslMatchId = ''
-  if (match.stage.type === 'GSL_GROUPS' && match.groupId) {
-    const group = await tx.group.findUnique({
-      where: { id: match.groupId },
-      select: { name: true },
+  if (dependentMatches.length === 0) {
+    // Legacy fallback: scope to stage/group and filter by source labels containing Winner/Loser
+    const whereClause = match.stage.type === 'GSL_GROUPS' && match.groupId
+      ? { stageId: match.stageId, groupId: match.groupId }
+      : { stageId: match.stageId }
+
+    dependentMatches = await tx.match.findMany({
+      where: {
+        ...whereClause,
+        OR: [
+          { homeTeamSource: { contains: 'Winner' } },
+          { awayTeamSource: { contains: 'Winner' } },
+          { homeTeamSource: { contains: 'Loser' } },
+          { awayTeamSource: { contains: 'Loser' } },
+        ],
+      },
     })
-    if (group) {
-      // Group name like "Group A" -> short label "A"
-      const shortLabel = group.name.replace(/^Group\s*/i, '').charAt(0).toUpperCase()
-      gslMatchId = `${shortLabel}${matchNumber}` // e.g., "A1", "A2"
+
+    // Further filter by bracketPosition pattern match (legacy logic)
+    const bracketPos = match.bracketPosition || ''
+    const matchNumberMatch = bracketPos.match(/M?(\d+)/)
+    const matchNumber = matchNumberMatch ? matchNumberMatch[1] : bracketPos
+
+    let matchId = bracketPos
+    if (match.stage.type === 'GSL_GROUPS' && match.groupId) {
+      const group = await tx.group.findUnique({
+        where: { id: match.groupId },
+        select: { name: true },
+      })
+      if (group) {
+        const shortLabel = group.name.replace(/^Group\s*/i, '').charAt(0).toUpperCase()
+        matchId = `${shortLabel}${matchNumber}`
+      }
     }
+
+    const pattern = new RegExp(`${matchId}\\s*(Winner|Loser)|(Winner|Loser).*${matchId}`, 'i')
+    dependentMatches = dependentMatches.filter(
+      m =>
+        (m.homeTeamSource && pattern.test(m.homeTeamSource)) ||
+        (m.awayTeamSource && pattern.test(m.awayTeamSource))
+    )
   }
-  
-  // Build regex patterns - for GSL use the group-specific ID, otherwise use bracketPosition
-  const matchId = gslMatchId || bracketPos
-  const winnerPattern = new RegExp(`${matchId}\\s*Winner|Winner.*${matchId}`, 'i')
-  const loserPattern = new RegExp(`${matchId}\\s*Loser|Loser.*${matchId}`, 'i')
-  
-  logger.info('Looking for dependent matches', {
-    bracketPosition: bracketPos,
-    matchId,
-    gslMatchId,
+
+  logger.info('Knockout progression: found dependent matches', {
+    sourceMatchId: match.id,
+    bracketPosition: match.bracketPosition,
     dependentCount: dependentMatches.length,
+    method: dependentMatches.length > 0 ? 'id-based' : 'none',
   })
-  
+
   for (const depMatch of dependentMatches) {
-    let updateData: { homeRegistrationId?: string; awayRegistrationId?: string } = {}
-    
-    // Check for winner references
-    if (depMatch.homeTeamSource && winnerPattern.test(depMatch.homeTeamSource)) {
-      updateData.homeRegistrationId = winnerId
-    }
-    if (depMatch.awayTeamSource && winnerPattern.test(depMatch.awayTeamSource)) {
-      updateData.awayRegistrationId = winnerId
-    }
-    
-    // Check for loser references (GSL groups and double elimination use losers)
-    if (loserId) {
-      if (depMatch.homeTeamSource && loserPattern.test(depMatch.homeTeamSource)) {
-        updateData.homeRegistrationId = loserId
-      }
-      if (depMatch.awayTeamSource && loserPattern.test(depMatch.awayTeamSource)) {
-        updateData.awayRegistrationId = loserId
-      }
-    }
+    const updateData: { homeRegistrationId?: string; awayRegistrationId?: string } = {}
+
+    // Use source labels to determine whether this slot takes the winner or loser
+    const homeIsWinner = depMatch.homeTeamSource?.toLowerCase().includes('winner')
+    const homeIsLoser = depMatch.homeTeamSource?.toLowerCase().includes('loser')
+    const awayIsWinner = depMatch.awayTeamSource?.toLowerCase().includes('winner')
+    const awayIsLoser = depMatch.awayTeamSource?.toLowerCase().includes('loser')
+
+    if (homeIsWinner && winnerId) updateData.homeRegistrationId = winnerId
+    if (homeIsLoser && loserId) updateData.homeRegistrationId = loserId
+    if (awayIsWinner && winnerId) updateData.awayRegistrationId = winnerId
+    if (awayIsLoser && loserId) updateData.awayRegistrationId = loserId
 
     if (Object.keys(updateData).length > 0) {
       await tx.match.update({
@@ -564,7 +560,6 @@ async function handleKnockoutProgression(
       })
       logger.info('Updated dependent match', {
         matchId: depMatch.id,
-        sourceMatchId: matchId,
         homeSource: depMatch.homeTeamSource,
         awaySource: depMatch.awayTeamSource,
         updateData,
@@ -895,51 +890,61 @@ async function clearKnockoutProgression(
     return
   }
 
-  // For GSL: scope to same group. For knockout: scope to same stage
-  const whereClause = match.stage.type === 'GSL_GROUPS' && match.groupId
-    ? { stageId: match.stageId, groupId: match.groupId }
-    : { stageId: match.stageId }
-
-  // Find matches that might have been populated from this match
-  const dependentMatches = await tx.match.findMany({
-    where: {
-      ...whereClause,
-      OR: [
-        { homeTeamSource: { contains: `Winner` } },
-        { awayTeamSource: { contains: `Winner` } },
-        { homeTeamSource: { contains: `Loser` } },
-        { awayTeamSource: { contains: `Loser` } },
-      ],
-    },
+  // Prefer explicit dependency IDs; fall back to legacy string-pattern search
+  let dependentMatches = await tx.match.findMany({
+    where: { dependsOnMatchIds: { has: match.id } },
   })
 
-  const bracketPos = match.bracketPosition || ''
-  
-  // Extract match number and build GSL-specific ID if needed
-  const matchNumberMatch = bracketPos.match(/M?(\d+)/)
-  const matchNumber = matchNumberMatch ? matchNumberMatch[1] : bracketPos
-  
-  let matchId = bracketPos
-  if (match.stage.type === 'GSL_GROUPS' && match.groupId) {
-    const group = await tx.group.findUnique({
-      where: { id: match.groupId },
-      select: { name: true },
+  if (dependentMatches.length === 0) {
+    const whereClause = match.stage.type === 'GSL_GROUPS' && match.groupId
+      ? { stageId: match.stageId, groupId: match.groupId }
+      : { stageId: match.stageId }
+
+    dependentMatches = await tx.match.findMany({
+      where: {
+        ...whereClause,
+        OR: [
+          { homeTeamSource: { contains: 'Winner' } },
+          { awayTeamSource: { contains: 'Winner' } },
+          { homeTeamSource: { contains: 'Loser' } },
+          { awayTeamSource: { contains: 'Loser' } },
+        ],
+      },
     })
-    if (group) {
-      const shortLabel = group.name.replace(/^Group\s*/i, '').charAt(0).toUpperCase()
-      matchId = `${shortLabel}${matchNumber}`
+
+    const bracketPos = match.bracketPosition || ''
+    const matchNumberMatch = bracketPos.match(/M?(\d+)/)
+    const matchNumber = matchNumberMatch ? matchNumberMatch[1] : bracketPos
+
+    let matchId = bracketPos
+    if (match.stage.type === 'GSL_GROUPS' && match.groupId) {
+      const group = await tx.group.findUnique({
+        where: { id: match.groupId },
+        select: { name: true },
+      })
+      if (group) {
+        const shortLabel = group.name.replace(/^Group\s*/i, '').charAt(0).toUpperCase()
+        matchId = `${shortLabel}${matchNumber}`
+      }
     }
+
+    const matchPattern = new RegExp(`${matchId}\\s*(Winner|Loser)|(Winner|Loser).*${matchId}`, 'i')
+    dependentMatches = dependentMatches.filter(
+      m =>
+        (m.homeTeamSource && matchPattern.test(m.homeTeamSource)) ||
+        (m.awayTeamSource && matchPattern.test(m.awayTeamSource))
+    )
   }
-  
-  const matchPattern = new RegExp(`${matchId}\\s*(Winner|Loser)|(Winner|Loser).*${matchId}`, 'i')
 
   for (const depMatch of dependentMatches) {
-    let updateData: { homeRegistrationId?: null; awayRegistrationId?: null } = {}
-    
-    if (depMatch.homeTeamSource && matchPattern.test(depMatch.homeTeamSource)) {
+    const updateData: { homeRegistrationId?: null; awayRegistrationId?: null } = {}
+
+    if (depMatch.homeTeamSource?.toLowerCase().includes('winner') ||
+        depMatch.homeTeamSource?.toLowerCase().includes('loser')) {
       updateData.homeRegistrationId = null
     }
-    if (depMatch.awayTeamSource && matchPattern.test(depMatch.awayTeamSource)) {
+    if (depMatch.awayTeamSource?.toLowerCase().includes('winner') ||
+        depMatch.awayTeamSource?.toLowerCase().includes('loser')) {
       updateData.awayRegistrationId = null
     }
 
@@ -1114,6 +1119,188 @@ export async function getGroupStandings(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get standings',
+    }
+  }
+}
+
+// ==========================================
+// Advancement Summary
+// ==========================================
+
+export interface QualifiedTeamInfo {
+  position: number
+  teamName: string
+  registrationId: string
+  nextMatchId: string | null
+  nextMatchLabel: string | null
+}
+
+export interface GroupAdvancementSummary {
+  groupId: string
+  groupName: string
+  stageType: string
+  totalMatches: number
+  completedMatches: number
+  isComplete: boolean
+  qualifiedTeams: QualifiedTeamInfo[]
+}
+
+export interface TBDSlotInfo {
+  matchId: string
+  matchLabel: string | null
+  bracketPosition: string | null
+  homeSource: string | null
+  awaySource: string | null
+}
+
+export interface AdvancementSummary {
+  groups: GroupAdvancementSummary[]
+  pendingSlots: TBDSlotInfo[]
+}
+
+/**
+ * Get advancement summary for a tournament:
+ * - For each group: whether it's complete, who qualified, and where they're going
+ * - For each bracket slot that's still TBD: what it's waiting for
+ */
+export async function getAdvancementSummary(
+  tournamentId: string
+): Promise<ActionResult<AdvancementSummary>> {
+  try {
+    const stages = await db.stage.findMany({
+      where: { tournamentId },
+      orderBy: { order: 'asc' },
+      include: {
+        groups: {
+          orderBy: { order: 'asc' },
+          include: {
+            teamAssignments: {
+              include: {
+                registration: { include: { team: true } },
+              },
+            },
+          },
+        },
+        matches: {
+          include: { result: true },
+        },
+      },
+    })
+
+    // Collect all TBD bracket slots across the tournament
+    const pendingSlots: TBDSlotInfo[] = []
+    for (const stage of stages) {
+      const bracketTypes = ['KNOCKOUT', 'DOUBLE_ELIMINATION', 'FINAL', 'GSL_GROUPS']
+      if (!bracketTypes.includes(stage.type)) continue
+
+      for (const match of stage.matches) {
+        const homeTBD = !match.homeRegistrationId && match.homeTeamSource
+        const awayTBD = !match.awayRegistrationId && match.awayTeamSource
+        if (homeTBD || awayTBD) {
+          pendingSlots.push({
+            matchId: match.id,
+            matchLabel: match.bracketPosition,
+            bracketPosition: match.bracketPosition,
+            homeSource: homeTBD ? match.homeTeamSource : null,
+            awaySource: awayTBD ? match.awayTeamSource : null,
+          })
+        }
+      }
+    }
+
+    // For each group-based stage, compute per-group advancement info
+    const groups: GroupAdvancementSummary[] = []
+    const groupStageTypes = ['GROUP_STAGE', 'GSL_GROUPS', 'ROUND_ROBIN']
+
+    for (const stage of stages) {
+      if (!groupStageTypes.includes(stage.type)) continue
+
+      for (const group of stage.groups) {
+        const groupMatches = stage.matches.filter(m => m.groupId === group.id)
+        const completedMatches = groupMatches.filter(m => m.status === 'COMPLETED')
+        const isComplete = groupMatches.length > 0 && completedMatches.length === groupMatches.length
+
+        // For GSL: check M3 and M5 specifically
+        const gslComplete = stage.type === 'GSL_GROUPS'
+          ? groupMatches.some(m => m.bracketPosition === 'M3' && m.status === 'COMPLETED') &&
+            groupMatches.some(m => m.bracketPosition === 'M5' && m.status === 'COMPLETED')
+          : isComplete
+
+        const effectivelyComplete = stage.type === 'GSL_GROUPS' ? gslComplete : isComplete
+
+        // Find which teams advanced (have their registration populated in a later-stage match)
+        // Look for matches in later stages whose home/awayTeamSource references this group
+        const groupName = group.name
+        const qualifiedTeams: QualifiedTeamInfo[] = []
+
+        if (effectivelyComplete) {
+          // For each team assignment in the group, check if they ended up in a later match
+          const laterStageMatches = stages
+            .filter(s => s.order > stage.order)
+            .flatMap(s => s.matches)
+
+          // Find matches in later stages that reference this group
+          const referencingMatches = laterStageMatches.filter(
+            m =>
+              (m.homeTeamSource?.toLowerCase().includes(groupName.toLowerCase())) ||
+              (m.awayTeamSource?.toLowerCase().includes(groupName.toLowerCase()))
+          )
+
+          for (const reg of group.teamAssignments) {
+            const teamName = reg.registration.registeredTeamName || reg.registration.team.name
+            const registrationId = reg.registrationId
+
+            // Find a later-stage match that has this team assigned
+            const nextMatch = laterStageMatches.find(
+              m => m.homeRegistrationId === registrationId || m.awayRegistrationId === registrationId
+            )
+
+            // Determine position (for display label)
+            let position = 0
+            if (nextMatch) {
+              const refMatch = referencingMatches.find(m => m.id === nextMatch.id)
+              if (refMatch) {
+                const src = refMatch.homeRegistrationId === registrationId
+                  ? refMatch.homeTeamSource
+                  : refMatch.awayTeamSource
+                const pos = parseGroupPosition(src || '', groupName)
+                position = pos ?? 0
+              }
+            }
+
+            if (nextMatch) {
+              qualifiedTeams.push({
+                position,
+                teamName,
+                registrationId,
+                nextMatchId: nextMatch.id,
+                nextMatchLabel: nextMatch.bracketPosition,
+              })
+            }
+          }
+
+          // Sort by position
+          qualifiedTeams.sort((a, b) => a.position - b.position)
+        }
+
+        groups.push({
+          groupId: group.id,
+          groupName,
+          stageType: stage.type,
+          totalMatches: groupMatches.length,
+          completedMatches: completedMatches.length,
+          isComplete: effectivelyComplete,
+          qualifiedTeams,
+        })
+      }
+    }
+
+    return { success: true, data: { groups, pendingSlots } }
+  } catch (error) {
+    logger.error('Failed to get advancement summary', { error, tournamentId })
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get advancement summary',
     }
   }
 }

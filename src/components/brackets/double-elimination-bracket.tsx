@@ -2,6 +2,7 @@
 
 import { ScheduledMatch } from '@/types'
 import { MatchCard } from './match-card'
+import { useTeamPath } from './use-team-path'
 
 interface DoubleEliminationBracketProps {
   matches: ScheduledMatch[]
@@ -11,9 +12,11 @@ interface DoubleEliminationBracketProps {
 
 /**
  * Double Elimination bracket visualization
- * Shows Winners bracket, Losers bracket, and Grand Final
+ * Shows Winners bracket → Losers bracket → Grand Final (in that order).
+ * Hover a team card to highlight their full path through the bracket.
  */
 export function DoubleEliminationBracket({ matches, stageName, compact = false }: DoubleEliminationBracketProps) {
+  const { highlightedTeamId, highlightTeam, clearHighlight } = useTeamPath(matches)
   // Separate matches by bracket type based on bracketPosition prefix
   const winnersMatches: ScheduledMatch[] = []
   const losersMatches: ScheduledMatch[] = []
@@ -68,19 +71,33 @@ export function DoubleEliminationBracket({ matches, stageName, compact = false }
     )
   }
 
+  const renderMatchCard = (match: ScheduledMatch) => (
+    <div
+      key={match.id}
+      className="relative flex items-center"
+      onMouseEnter={() => {
+        const id = match.homeTeam?.id || match.awayTeam?.id
+        if (id) highlightTeam(id)
+      }}
+      onMouseLeave={clearHighlight}
+    >
+      <MatchCard match={match} compact={compact} highlightedTeamId={highlightedTeamId} />
+    </div>
+  )
+
   return (
-    <div className="p-4 overflow-x-auto">
+    <div className="p-4 overflow-x-auto space-y-8">
       {stageName && (
-        <h4 className="font-semibold text-gray-900 mb-4">{stageName}</h4>
+        <h4 className="font-semibold text-gray-900">{stageName}</h4>
       )}
 
       {/* Winners Bracket */}
-      <div className="mb-8">
+      <div>
         <div className="flex items-center gap-2 mb-4">
           <div className="w-3 h-3 bg-blue-500 rounded-full" />
           <h5 className="font-medium text-gray-700">Winners Bracket</h5>
         </div>
-        
+
         <div className="flex gap-8 min-w-max">
           {winnersRounds.map((roundNum, roundIndex) => {
             const roundMatches = winnersByRound.get(roundNum) || []
@@ -91,48 +108,17 @@ export function DoubleEliminationBracket({ matches, stageName, compact = false }
                 <div className="text-xs font-medium text-gray-500 text-center mb-4 pb-2 border-b border-gray-200">
                   {roundIndex === winnersRounds.length - 1 ? 'Winners Final' : `W Round ${roundNum}`}
                 </div>
-                <div 
+                <div
                   className="flex flex-col justify-around flex-1"
                   style={{ gap: `${spacingMultiplier * 12}px` }}
                 >
-                  {roundMatches.map((match, matchIndex) => (
-                    <div key={match.id} className="relative flex items-center">
-                      <MatchCard match={match} compact={compact} />
-                      {roundIndex < winnersRounds.length - 1 && (
-                        <div className="absolute -right-4 top-1/2 w-4 border-t-2 border-blue-300" />
-                      )}
-                    </div>
-                  ))}
+                  {roundMatches.map(match => renderMatchCard(match))}
                 </div>
               </div>
             )
           })}
         </div>
       </div>
-
-      {/* Grand Final */}
-      {grandFinalMatches.length > 0 && (
-        <div className="mb-8 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-3 h-3 bg-yellow-500 rounded-full" />
-            <h5 className="font-medium text-gray-700">Grand Final</h5>
-          </div>
-          
-          <div className="flex gap-8">
-            {grandFinalMatches
-              .sort((a, b) => (a.bracketPosition || '').localeCompare(b.bracketPosition || ''))
-              .map(match => (
-                <div key={match.id} className="flex flex-col items-center">
-                  <MatchCard match={match} compact={compact} />
-                  {match.bracketPosition === 'GF-R' && (
-                    <span className="text-xs text-gray-500 mt-1">If needed</span>
-                  )}
-                </div>
-              ))
-            }
-          </div>
-        </div>
-      )}
 
       {/* Losers Bracket */}
       {losersMatches.length > 0 && (
@@ -141,7 +127,7 @@ export function DoubleEliminationBracket({ matches, stageName, compact = false }
             <div className="w-3 h-3 bg-red-400 rounded-full" />
             <h5 className="font-medium text-gray-700">Losers Bracket</h5>
           </div>
-          
+
           <div className="flex gap-8 min-w-max">
             {losersRounds.map((roundNum, roundIndex) => {
               const roundMatches = losersByRound.get(roundNum) || []
@@ -152,18 +138,11 @@ export function DoubleEliminationBracket({ matches, stageName, compact = false }
                   <div className="text-xs font-medium text-gray-500 text-center mb-4 pb-2 border-b border-gray-200">
                     {roundIndex === losersRounds.length - 1 ? 'Losers Final' : `L Round ${roundNum}`}
                   </div>
-                  <div 
+                  <div
                     className="flex flex-col justify-around flex-1"
                     style={{ gap: `${spacingMultiplier * 8}px` }}
                   >
-                    {roundMatches.map(match => (
-                      <div key={match.id} className="relative flex items-center">
-                        <MatchCard match={match} compact={compact} />
-                        {roundIndex < losersRounds.length - 1 && (
-                          <div className="absolute -right-4 top-1/2 w-4 border-t-2 border-red-300" />
-                        )}
-                      </div>
-                    ))}
+                    {roundMatches.map(match => renderMatchCard(match))}
                   </div>
                 </div>
               )
@@ -172,8 +151,31 @@ export function DoubleEliminationBracket({ matches, stageName, compact = false }
         </div>
       )}
 
+      {/* Grand Final */}
+      {grandFinalMatches.length > 0 && (
+        <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-3 h-3 bg-yellow-500 rounded-full" />
+            <h5 className="font-medium text-gray-700">Grand Final</h5>
+          </div>
+
+          <div className="flex gap-6 flex-wrap">
+            {grandFinalMatches
+              .sort((a, b) => (a.bracketPosition || '').localeCompare(b.bracketPosition || ''))
+              .map(match => (
+                <div key={match.id} className="flex flex-col items-center">
+                  {renderMatchCard(match)}
+                  {match.bracketPosition === 'GF-R' && (
+                    <span className="text-xs text-gray-500 mt-1">Bracket reset (if needed)</span>
+                  )}
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       {/* Legend */}
-      <div className="mt-6 pt-4 border-t border-gray-200 flex gap-6 text-xs text-gray-500">
+      <div className="pt-4 border-t border-gray-200 flex gap-6 text-xs text-gray-500">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-blue-500 rounded-full" />
           <span>Winners Bracket</span>
@@ -185,6 +187,9 @@ export function DoubleEliminationBracket({ matches, stageName, compact = false }
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-yellow-500 rounded-full" />
           <span>Grand Final</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="italic text-gray-400">Hover a match card to trace a team's path</span>
         </div>
       </div>
     </div>

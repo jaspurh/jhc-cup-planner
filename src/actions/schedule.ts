@@ -247,7 +247,11 @@ export async function generateTournamentSchedule(
 }
 
 /**
- * Save allocated matches to the database
+ * Save allocated matches to the database.
+ *
+ * Two-pass approach:
+ * 1. Create all matches and build tempId → DB id map
+ * 2. Resolve dependsOn tempIds to actual DB ids and store them
  */
 async function saveMatches(matches: AllocatedMatch[]): Promise<void> {
   // Sort by scheduled time for consistent match numbering
@@ -255,11 +259,13 @@ async function saveMatches(matches: AllocatedMatch[]): Promise<void> {
     (a, b) => a.scheduledStartTime.getTime() - b.scheduledStartTime.getTime()
   )
 
-  // Create matches in database
+  // Pass 1: create all matches, collect tempId → DB id mapping
+  const tempIdToDbId = new Map<string, string>()
+
   for (let i = 0; i < sortedMatches.length; i++) {
     const match = sortedMatches[i]
-    
-    await db.match.create({
+
+    const created = await db.match.create({
       data: {
         stageId: match.stageId,
         groupId: match.groupId || null,
@@ -268,14 +274,35 @@ async function saveMatches(matches: AllocatedMatch[]): Promise<void> {
         awayRegistrationId: match.awayRegistrationId,
         homeTeamSource: match.metadata?.homeSource || null,
         awayTeamSource: match.metadata?.awaySource || null,
-        matchNumber: i + 1, // Sequential numbering
+        matchNumber: i + 1,
         roundNumber: match.roundNumber,
         bracketPosition: match.bracketPosition || null,
         scheduledStartTime: match.scheduledStartTime,
         scheduledEndTime: match.scheduledEndTime,
         status: 'SCHEDULED',
       },
+      select: { id: true },
     })
+
+    tempIdToDbId.set(match.tempId, created.id)
+  }
+
+  // Pass 2: for matches that have dependencies, resolve tempIds → DB ids and update
+  const matchesWithDeps = sortedMatches.filter(m => m.dependsOn.length > 0)
+  for (const match of matchesWithDeps) {
+    const dbId = tempIdToDbId.get(match.tempId)
+    if (!dbId) continue
+
+    const resolvedIds = match.dependsOn
+      .map(tid => tempIdToDbId.get(tid))
+      .filter((id): id is string => id !== undefined)
+
+    if (resolvedIds.length > 0) {
+      await db.match.update({
+        where: { id: dbId },
+        data: { dependsOnMatchIds: resolvedIds },
+      })
+    }
   }
 }
 

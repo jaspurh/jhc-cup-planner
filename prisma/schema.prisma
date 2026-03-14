@@ -435,7 +435,11 @@ model Match {
   // Team source labels (e.g., "Winner Group A", "2nd Group B") for TBD teams
   homeTeamSource    String?
   awayTeamSource    String?
-  
+
+  // Explicit dependency tracking: IDs of matches whose winner/loser populates this match
+  // Populated during schedule generation; used for reliable bracket progression
+  dependsOnMatchIds String[]    @default([])
+
   // Match metadata
   matchNumber       Int?
   roundNumber       Int?

@@ -2,6 +2,7 @@
 
 import { ScheduledMatch } from '@/types'
 import { MatchCard } from './match-card'
+import { useTeamPath } from './use-team-path'
 
 interface SingleEliminationBracketProps {
   matches: ScheduledMatch[]
@@ -11,9 +12,11 @@ interface SingleEliminationBracketProps {
 
 /**
  * Single Elimination bracket visualization
- * Displays matches in rounds from left to right, with connecting lines
+ * Displays matches in rounds from left to right, with connecting lines.
+ * Hover a team name to highlight their path through the bracket.
  */
 export function SingleEliminationBracket({ matches, stageName, compact = false }: SingleEliminationBracketProps) {
+  const { highlightedTeamId, highlightTeam, clearHighlight } = useTeamPath(matches)
   // Layout dimensions
   const cardW = compact ? 150 : 180
   const cardH = compact ? 56 : 76
@@ -200,25 +203,30 @@ export function SingleEliminationBracket({ matches, stageName, compact = false }
 
         {/* Match cards */}
         {positions.map((pos) => (
-          <div 
+          <div
             key={pos.match.id}
-            className="absolute" 
+            className="absolute"
             style={{ left: pos.x, top: pos.y, width: cardW }}
+            onMouseEnter={() => {
+              const id = pos.match.homeTeam?.id || pos.match.awayTeam?.id
+              if (id) highlightTeam(id)
+            }}
+            onMouseLeave={clearHighlight}
           >
-            <MatchCard match={pos.match} compact={compact} />
+            <MatchCard match={pos.match} compact={compact} highlightedTeamId={highlightedTeamId} />
           </div>
         ))}
 
         {/* 3rd Place Match */}
         {thirdPlaceMatch && thirdPlacePos && (
-          <div 
-            className="absolute" 
+          <div
+            className="absolute"
             style={{ left: thirdPlacePos.x, top: thirdPlacePos.y, width: cardW }}
           >
             <div className="text-xs text-gray-500 font-medium text-center mb-1 pt-2 border-t border-gray-200">
               Third Place
             </div>
-            <MatchCard match={thirdPlaceMatch} compact={compact} />
+            <MatchCard match={thirdPlaceMatch} compact={compact} highlightedTeamId={highlightedTeamId} />
           </div>
         )}
       </div>

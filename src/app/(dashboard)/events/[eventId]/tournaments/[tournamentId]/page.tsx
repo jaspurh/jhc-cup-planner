@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/badge'
 import { formatTournamentFormat, formatTournamentStyle, formatStageType } from '@/lib/constants'
+import { TournamentFlowDiagram } from '@/components/tournaments/tournament-flow-diagram'
 
 interface TournamentPageProps {
   params: Promise<{ eventId: string; tournamentId: string }>
@@ -85,6 +86,18 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Tournament Flow */}
+      {tournament.stages.length > 0 && (
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="text-base">Tournament Flow</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TournamentFlowDiagram stages={tournament.stages.map(s => ({ ...s, configuration: s.configuration as Record<string, unknown> | null | undefined }))} />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Teams */}
