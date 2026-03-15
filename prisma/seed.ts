@@ -6,9 +6,26 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('🌱 Starting database seed...')
 
+  // Create admin user
+  const adminPasswordHash = await hash('admin123', 12)
+
+  const adminUser = await prisma.user.upsert({
+    where: { email: 'admin@cupplanner.com' },
+    update: {},
+    create: {
+      email: 'admin@cupplanner.com',
+      name: 'Admin',
+      passwordHash: adminPasswordHash,
+      emailVerified: new Date(),
+      platformRole: 'ADMIN',
+    },
+  })
+
+  console.log(`✅ Created admin user: ${adminUser.email}`)
+
   // Create demo user
   const passwordHash = await hash('password123', 12)
-  
+
   const demoUser = await prisma.user.upsert({
     where: { email: 'demo@cupplanner.com' },
     update: {},
@@ -19,7 +36,7 @@ async function main() {
       emailVerified: new Date(),
     },
   })
-  
+
   console.log(`✅ Created demo user: ${demoUser.email}`)
 
   // Create demo event
@@ -167,9 +184,9 @@ async function main() {
   console.log('')
   console.log('🎉 Seed completed successfully!')
   console.log('')
-  console.log('Demo credentials:')
-  console.log('  Email: demo@cupplanner.com')
-  console.log('  Password: password123')
+  console.log('Credentials:')
+  console.log('  Admin  — admin@cupplanner.com  / admin123')
+  console.log('  Demo   — demo@cupplanner.com   / password123')
 }
 
 main()
