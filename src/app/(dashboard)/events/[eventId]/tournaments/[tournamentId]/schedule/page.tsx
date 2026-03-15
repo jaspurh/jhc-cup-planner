@@ -2,13 +2,14 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getTournament } from '@/actions/tournament'
 import { getTournamentSchedule } from '@/actions/schedule'
-import { getGroupStandings, type GroupStandings } from '@/actions/match'
+import { getGroupStandings, getAdvancementSummary, type GroupStandings } from '@/actions/match'
 import { getBracketStages, getBracketMatches } from '@/actions/bracket'
 import { db } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { ScheduleView } from '@/components/schedule/schedule-view'
 import { ScheduleActions } from '@/components/schedule/schedule-actions'
 import { CompactStandingsDisplay } from '@/components/standings/group-standings'
+import { PendingSlotsPanel } from '@/components/standings/advancement-summary'
 import { BracketView } from '@/components/brackets'
 import { StageType, ScheduledMatch } from '@/types'
 
@@ -19,9 +20,10 @@ interface SchedulePageProps {
 export default async function TournamentSchedulePage({ params }: SchedulePageProps) {
   const { eventId, tournamentId } = await params
 
-  const [tournamentResult, scheduleResult] = await Promise.all([
+  const [tournamentResult, scheduleResult, advancementResult] = await Promise.all([
     getTournament(tournamentId),
     getTournamentSchedule(tournamentId),
+    getAdvancementSummary(tournamentId),
   ])
 
   if (!tournamentResult.success || !tournamentResult.data) {
@@ -30,6 +32,7 @@ export default async function TournamentSchedulePage({ params }: SchedulePagePro
 
   const tournament = tournamentResult.data
   const matches = scheduleResult.success ? scheduleResult.data || [] : []
+  const pendingSlots = advancementResult.success ? advancementResult.data?.pendingSlots ?? [] : []
 
   // Get group stages for standings display (regular groups and round robin, not GSL)
   const groupStages = await db.stage.findMany({
@@ -222,6 +225,12 @@ export default async function TournamentSchedulePage({ params }: SchedulePagePro
               View Full Brackets →
             </Link>
           </div>
+
+          <PendingSlotsPanel
+            pendingSlots={pendingSlots}
+            standingsHref={`/events/${eventId}/tournaments/${tournamentId}/standings`}
+          />
+
           {bracketViews.map(({ stageId, stageName, stageType, matches, groups, matchesByGroup }) => (
             <div key={stageId} className="bg-white rounded-lg border overflow-hidden">
               <div className="px-4 py-3 bg-gray-50 border-b">

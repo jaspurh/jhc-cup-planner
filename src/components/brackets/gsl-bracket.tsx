@@ -2,6 +2,7 @@
 
 import { ScheduledMatch } from '@/types'
 import { MatchCard } from './match-card'
+import { useTeamPath } from './use-team-path'
 
 interface GSLBracketProps {
   matches: ScheduledMatch[]
@@ -11,8 +12,10 @@ interface GSLBracketProps {
 
 /**
  * GSL Group bracket visualization
+ * Hover a team to highlight their path through the 5-match format.
  */
 export function GSLBracket({ matches, groupName, compact = false }: GSLBracketProps) {
+  const { highlightedTeamId, highlightTeam, clearHighlight } = useTeamPath(matches)
   const m1 = matches.find(m => m.bracketPosition === 'M1')
   const m2 = matches.find(m => m.bracketPosition === 'M2')
   const m3 = matches.find(m => m.bracketPosition === 'M3')
@@ -145,32 +148,57 @@ export function GSLBracket({ matches, groupName, compact = false }: GSLBracketPr
         </svg>
 
         {/* M1 - Opening Match 1 */}
-        <div className="absolute" style={{ left: col1X, top: m1Y, width: cardW }}>
-          <MatchCard match={m1} compact={compact} />
+        <div
+          className="absolute"
+          style={{ left: col1X, top: m1Y, width: cardW }}
+          onMouseEnter={() => highlightTeam(m1.homeTeam?.id || m1.awayTeam?.id || null)}
+          onMouseLeave={clearHighlight}
+        >
+          <MatchCard match={m1} compact={compact} highlightedTeamId={highlightedTeamId} />
           <div className="text-xs text-gray-400 text-center mt-1">M1</div>
         </div>
 
         {/* M2 - Opening Match 2 */}
-        <div className="absolute" style={{ left: col1X, top: m2Y, width: cardW }}>
-          <MatchCard match={m2} compact={compact} />
+        <div
+          className="absolute"
+          style={{ left: col1X, top: m2Y, width: cardW }}
+          onMouseEnter={() => highlightTeam(m2.homeTeam?.id || m2.awayTeam?.id || null)}
+          onMouseLeave={clearHighlight}
+        >
+          <MatchCard match={m2} compact={compact} highlightedTeamId={highlightedTeamId} />
           <div className="text-xs text-gray-400 text-center mt-1">M2</div>
         </div>
 
         {/* M3 - Winners Match */}
-        <div className="absolute" style={{ left: col2X, top: m3Y, width: cardW }}>
-          <MatchCard match={m3} compact={compact} />
+        <div
+          className="absolute"
+          style={{ left: col2X, top: m3Y, width: cardW }}
+          onMouseEnter={() => highlightTeam(m3.homeTeam?.id || m3.awayTeam?.id || null)}
+          onMouseLeave={clearHighlight}
+        >
+          <MatchCard match={m3} compact={compact} highlightedTeamId={highlightedTeamId} />
           <div className="text-xs text-gray-400 text-center mt-1">M3 - Winners</div>
         </div>
 
         {/* M4 - Losers/Elimination Match */}
-        <div className="absolute" style={{ left: col2X, top: m4Y, width: cardW }}>
-          <MatchCard match={m4} compact={compact} />
+        <div
+          className="absolute"
+          style={{ left: col2X, top: m4Y, width: cardW }}
+          onMouseEnter={() => highlightTeam(m4.homeTeam?.id || m4.awayTeam?.id || null)}
+          onMouseLeave={clearHighlight}
+        >
+          <MatchCard match={m4} compact={compact} highlightedTeamId={highlightedTeamId} />
           <div className="text-xs text-gray-400 text-center mt-1">M4 - Elimination</div>
         </div>
 
         {/* M5 - Decider Match */}
-        <div className="absolute" style={{ left: col3X, top: m5Y, width: cardW }}>
-          <MatchCard match={m5} compact={compact} />
+        <div
+          className="absolute"
+          style={{ left: col3X, top: m5Y, width: cardW }}
+          onMouseEnter={() => highlightTeam(m5.homeTeam?.id || m5.awayTeam?.id || null)}
+          onMouseLeave={clearHighlight}
+        >
+          <MatchCard match={m5} compact={compact} highlightedTeamId={highlightedTeamId} />
           <div className="text-xs text-gray-400 text-center mt-1">M5 - Decider</div>
         </div>
       </div>

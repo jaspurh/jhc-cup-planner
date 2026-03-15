@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getTournament } from '@/actions/tournament'
-import { getGroupStandings, type GroupStandings } from '@/actions/match'
+import { getGroupStandings, getAdvancementSummary, type GroupStandings, type GroupAdvancementSummary } from '@/actions/match'
 import { getBracketStages, getBracketMatches, getGSLGroupMatches } from '@/actions/bracket'
 import { db } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { BracketView, supportsBracketView } from '@/components/brackets'
+import { GroupAdvancementCallout } from '@/components/standings/advancement-summary'
 import { StageType, ScheduledMatch } from '@/types'
 
 interface StandingsPageProps {
@@ -41,6 +42,12 @@ export default async function TournamentStandingsPage({ params }: StandingsPageP
       stageStandings.push({ stage, standings: result.data })
     }
   }
+
+  // Get advancement summary (group completion + TBD slots)
+  const advancementResult = await getAdvancementSummary(tournamentId)
+  const advancementGroups: GroupAdvancementSummary[] = advancementResult.success
+    ? advancementResult.data?.groups ?? []
+    : []
 
   // Get bracket stages (GSL, Knockout, Double Elimination, Final)
   const bracketStagesResult = await getBracketStages(tournamentId)
@@ -116,9 +123,15 @@ export default async function TournamentStandingsPage({ params }: StandingsPageP
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {standings.map(group => (
-                    <GroupTable key={group.groupId} group={group} />
-                  ))}
+                  {standings.map(group => {
+                    const advGroup = advancementGroups.find(g => g.groupId === group.groupId)
+                    return (
+                      <div key={group.groupId}>
+                        <GroupTable group={group} />
+                        {advGroup && <GroupAdvancementCallout group={advGroup} />}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
