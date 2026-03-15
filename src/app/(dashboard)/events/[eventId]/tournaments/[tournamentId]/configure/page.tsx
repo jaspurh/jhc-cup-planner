@@ -4,11 +4,13 @@ import { getTournament } from '@/actions/tournament'
 import { getTournamentRegistrations } from '@/actions/team'
 import { getTournamentPitches } from '@/actions/pitch'
 import { getStagesWithDetails } from '@/actions/stage'
+import { getTournamentRoles } from '@/actions/roles'
 import { Button } from '@/components/ui/button'
 import { PitchManager } from '@/components/pitches/pitch-manager'
 import { StageBuilder } from '@/components/stages/stage-builder'
 import { ScheduleGenerator } from '@/components/schedule/schedule-generator'
 import { TournamentFlowDiagram } from '@/components/tournaments/tournament-flow-diagram'
+import { TournamentRolesManager } from '@/components/roles/tournament-roles-manager'
 
 interface ConfigurePageProps {
   params: Promise<{ eventId: string; tournamentId: string }>
@@ -17,11 +19,12 @@ interface ConfigurePageProps {
 export default async function TournamentConfigurePage({ params }: ConfigurePageProps) {
   const { eventId, tournamentId } = await params
 
-  const [tournamentResult, registrationsResult, pitchesResult, stagesResult] = await Promise.all([
+  const [tournamentResult, registrationsResult, pitchesResult, stagesResult, rolesResult] = await Promise.all([
     getTournament(tournamentId),
     getTournamentRegistrations(tournamentId),
     getTournamentPitches(tournamentId),
     getStagesWithDetails(tournamentId),
+    getTournamentRoles(tournamentId),
   ])
 
   if (!tournamentResult.success || !tournamentResult.data) {
@@ -32,6 +35,7 @@ export default async function TournamentConfigurePage({ params }: ConfigurePageP
   const registrations = registrationsResult.success ? registrationsResult.data?.registrations || [] : []
   const pitches = pitchesResult.success ? pitchesResult.data || [] : []
   const stages = stagesResult.success ? stagesResult.data || [] : []
+  const roleMembers = rolesResult.success ? rolesResult.data || [] : []
 
   const confirmedTeams = registrations.filter(r => r.status === 'CONFIRMED')
 
@@ -141,6 +145,18 @@ export default async function TournamentConfigurePage({ params }: ConfigurePageP
         initialStages={stages}
         confirmedTeams={confirmedTeams}
       />
+
+      {/* Team & Access */}
+      <div className="bg-white rounded-lg border p-4">
+        <h2 className="font-semibold text-gray-900 mb-1">Team & Access</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Control who can manage this tournament. Add users by their account email.
+        </p>
+        <TournamentRolesManager
+          tournamentId={tournamentId}
+          initialMembers={roleMembers}
+        />
+      </div>
     </div>
   )
 }

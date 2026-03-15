@@ -2,13 +2,13 @@
 
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
-import { auth } from '@/lib/auth'
 import { logger } from '@/lib/logger'
-import { 
-  enterMatchResultSchema, 
+import { requireAuth, requireManager, writeAuditLog } from '@/lib/permissions'
+import {
+  enterMatchResultSchema,
   updateMatchResultSchema,
   type EnterMatchResultInput,
-  type UpdateMatchResultInput 
+  type UpdateMatchResultInput
 } from '@/lib/schemas/match'
 import type { ActionResult } from '@/types'
 
@@ -24,11 +24,7 @@ export async function enterMatchResult(
   input: EnterMatchResultInput
 ): Promise<ActionResult<{ id: string }>> {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' }
-    }
-
+    const user = await requireAuth()
     const validated = enterMatchResultSchema.parse(input)
 
     // Get match with stage and tournament info
@@ -50,6 +46,8 @@ export async function enterMatchResult(
       return { success: false, error: 'Match not found' }
     }
 
+    await requireManager(user, match.stage.tournamentId)
+
     if (match.result) {
       return { success: false, error: 'Match already has a result. Use update instead.' }
     }
@@ -65,7 +63,7 @@ export async function enterMatchResult(
           homePenalties: validated.homePenalties,
           awayPenalties: validated.awayPenalties,
           notes: validated.notes,
-          enteredById: session.user?.id,
+          enteredById: user.id,
         },
       })
 
@@ -87,9 +85,14 @@ export async function enterMatchResult(
       return matchResult
     })
 
-    logger.info('Match result entered', { 
-      matchId: validated.matchId, 
-      homeScore: validated.homeScore, 
+    await writeAuditLog(user.id, 'RESULT_ENTERED', 'Match', validated.matchId, {
+      homeScore: validated.homeScore,
+      awayScore: validated.awayScore,
+    })
+
+    logger.info('Match result entered', {
+      matchId: validated.matchId,
+      homeScore: validated.homeScore,
       awayScore: validated.awayScore,
       homePenalties: validated.homePenalties,
       awayPenalties: validated.awayPenalties,
@@ -119,11 +122,7 @@ export async function updateMatchResult(
   input: UpdateMatchResultInput
 ): Promise<ActionResult<{ id: string }>> {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' }
-    }
-
+    const user = await requireAuth()
     const validated = updateMatchResultSchema.parse(input)
 
     const match = await db.match.findUnique({
@@ -143,6 +142,8 @@ export async function updateMatchResult(
     if (!match) {
       return { success: false, error: 'Match not found' }
     }
+
+    await requireManager(user, match.stage.tournamentId)
 
     if (!match.result) {
       return { success: false, error: 'Match has no result to update' }
@@ -216,10 +217,7 @@ export async function deleteMatchResult(
   matchId: string
 ): Promise<ActionResult<void>> {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' }
-    }
+    const user = await requireAuth()
 
     const match = await db.match.findUnique({
       where: { id: matchId },
@@ -238,6 +236,8 @@ export async function deleteMatchResult(
     if (!match) {
       return { success: false, error: 'Match not found' }
     }
+
+    await requireManager(user, match.stage.tournamentId)
 
     if (!match.result) {
       return { success: false, error: 'Match has no result to delete' }
@@ -295,10 +295,7 @@ export async function saveLiveScore(
   awayScore: number
 ): Promise<ActionResult<{ id: string }>> {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' }
-    }
+    const user = await requireAuth()
 
     const match = await db.match.findUnique({
       where: { id: matchId },
@@ -318,6 +315,8 @@ export async function saveLiveScore(
       return { success: false, error: 'Match not found' }
     }
 
+    await requireManager(user, match.stage.tournamentId)
+
     // Start the match if not already started
     const newStatus = match.status === 'SCHEDULED' ? 'IN_PROGRESS' : match.status
 
@@ -330,7 +329,7 @@ export async function saveLiveScore(
         }),
         db.match.update({
           where: { id: matchId },
-          data: { 
+          data: {
             status: newStatus,
             actualStartTime: match.actualStartTime || new Date(),
           },
@@ -344,7 +343,7 @@ export async function saveLiveScore(
             matchId,
             homeScore,
             awayScore,
-            enteredById: session.user?.id,
+            enteredById: user.id,
           },
         }),
         db.match.update({
@@ -378,10 +377,7 @@ export async function saveLiveScore(
 
 export async function startMatch(matchId: string): Promise<ActionResult<void>> {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: 'Unauthorized' }
-    }
+    const user = await requireAuth()
 
     const match = await db.match.findUnique({
       where: { id: matchId },
@@ -399,6 +395,8 @@ export async function startMatch(matchId: string): Promise<ActionResult<void>> {
     if (!match) {
       return { success: false, error: 'Match not found' }
     }
+
+    await requireManager(user, match.stage.tournamentId)
 
     if (match.status !== 'SCHEDULED') {
       return { success: false, error: 'Can only start scheduled matches' }

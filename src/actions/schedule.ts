@@ -17,6 +17,7 @@ import {
   AllocatedMatch,
 } from '@/lib/scheduling'
 import { logger } from '@/lib/logger'
+import { requireAuth, requireOrganizer, requireManager, writeAuditLog } from '@/lib/permissions'
 
 // ==========================================
 // Types
@@ -61,6 +62,9 @@ export async function generateTournamentSchedule(
   input: GenerateScheduleInput
 ): Promise<ActionResult<ScheduleStats>> {
   try {
+    const user = await requireAuth()
+    await requireOrganizer(user, input.tournamentId)
+
     const { tournamentId, startTime, minimumRestMinutes = 0, preferredRestMinutes = 0 } = input
 
     // Fetch tournament with all needed relations
@@ -423,6 +427,11 @@ export async function clearTournamentSchedule(
   tournamentId: string
 ): Promise<ActionResult> {
   try {
+    const user = await requireAuth()
+    await requireOrganizer(user, tournamentId)
+
+    await writeAuditLog(user.id, 'SCHEDULE_CLEARED', 'Tournament', tournamentId)
+
     const tournament = await db.tournament.findUnique({
       where: { id: tournamentId },
       include: {
@@ -625,6 +634,9 @@ export async function resetDependentTeamAssignments(
   tournamentId: string
 ): Promise<ActionResult<{ resetCount: number }>> {
   try {
+    const user = await requireAuth()
+    await requireOrganizer(user, tournamentId)
+
     const tournament = await db.tournament.findUnique({
       where: { id: tournamentId },
       include: {
@@ -696,6 +708,8 @@ export async function updateMatchTime(
   newStartTime: Date
 ): Promise<ActionResult<{ id: string }>> {
   try {
+    const user = await requireAuth()
+
     const match = await db.match.findUnique({
       where: { id: matchId },
       include: {
@@ -712,6 +726,8 @@ export async function updateMatchTime(
     if (!match) {
       return { success: false, error: 'Match not found' }
     }
+
+    await requireManager(user, match.stage.tournamentId)
 
     // Only allow rescheduling of scheduled matches
     if (match.status !== 'SCHEDULED') {

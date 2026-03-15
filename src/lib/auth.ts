@@ -4,6 +4,7 @@ import Credentials from 'next-auth/providers/credentials'
 import { db } from '@/lib/db'
 import { loginSchema } from '@/lib/schemas/auth'
 import { logger } from '@/lib/logger'
+import { PlatformRole } from '@/generated/prisma'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
@@ -46,6 +47,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: user.email,
             name: user.name,
             image: user.image,
+            platformRole: user.platformRole,
           }
         } catch (error) {
           logger.error('Login error', { error })
@@ -57,13 +59,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
+        token.id = user.id as string
+        token.platformRole = (user as unknown as { platformRole?: PlatformRole }).platformRole ?? PlatformRole.USER
       }
       return token
     },
     async session({ session, token }) {
       if (token && session.user) {
-        session.user.id = token.id as string
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const user = session.user as any
+        user.id = token.id as string
+        user.platformRole = (token.platformRole as PlatformRole) ?? PlatformRole.USER
       }
       return session
     },

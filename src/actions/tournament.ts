@@ -3,6 +3,7 @@
 import { db } from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { logger } from '@/lib/logger'
+import { writeAuditLog } from '@/lib/permissions'
 import { 
   createTournamentSchema, 
   updateTournamentSchema,
@@ -391,6 +392,10 @@ export async function deleteTournament(tournamentId: string): Promise<ActionResu
     // Delete tournament (cascades)
     await db.tournament.delete({
       where: { id: tournamentId }
+    })
+
+    await writeAuditLog(session.user.id, 'TOURNAMENT_DELETED', 'Tournament', tournamentId, {
+      name: existing.name,
     })
 
     logger.info('Tournament deleted', { tournamentId, userId: session.user.id })
