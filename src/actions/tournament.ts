@@ -26,11 +26,19 @@ export async function getTournament(tournamentId: string): Promise<ActionResult<
       return { success: false, error: 'Not authenticated' }
     }
 
+    const userId = session.user.id
+    const isAdmin = (session.user as { platformRole?: string }).platformRole === 'ADMIN'
+
     const tournament = await db.tournament.findFirst({
-      where: { 
-        id: tournamentId,
-        event: { ownerId: session.user.id }
-      },
+      where: isAdmin
+        ? { id: tournamentId }
+        : {
+            id: tournamentId,
+            OR: [
+              { event: { ownerId: userId } },
+              { roles: { some: { userId } } },
+            ],
+          },
       include: {
         event: {
           select: {
@@ -39,6 +47,7 @@ export async function getTournament(tournamentId: string): Promise<ActionResult<
             slug: true,
             startDate: true,
             endDate: true,
+            ownerId: true,
           }
         },
         stages: {

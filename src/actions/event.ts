@@ -25,7 +25,12 @@ export async function getMyEvents(): Promise<ActionResult<EventWithTournaments[]
     }
 
     const events = await db.event.findMany({
-      where: { ownerId: session.user.id },
+      where: {
+        OR: [
+          { ownerId: session.user.id },
+          { tournaments: { some: { roles: { some: { userId: session.user.id } } } } },
+        ],
+      },
       include: {
         tournaments: {
           select: {
@@ -77,11 +82,19 @@ export async function getEvent(eventId: string): Promise<ActionResult<EventWithT
       return { success: false, error: 'Not authenticated' }
     }
 
+    const userId = session.user.id
+    const isAdmin = (session.user as { platformRole?: string }).platformRole === 'ADMIN'
+
     const event = await db.event.findFirst({
-      where: { 
-        id: eventId,
-        ownerId: session.user.id 
-      },
+      where: isAdmin
+        ? { id: eventId }
+        : {
+            id: eventId,
+            OR: [
+              { ownerId: userId },
+              { tournaments: { some: { roles: { some: { userId } } } } },
+            ],
+          },
       include: {
         tournaments: {
           select: {

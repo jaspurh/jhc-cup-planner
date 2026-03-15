@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getEvent } from '@/actions/event'
+import { getCurrentUser, isPlatformAdmin } from '@/lib/permissions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/badge'
@@ -14,13 +15,19 @@ interface EventPageProps {
 
 export default async function EventPage({ params }: EventPageProps) {
   const { eventId } = await params
-  const result = await getEvent(eventId)
-  
+  const [result, currentUser] = await Promise.all([
+    getEvent(eventId),
+    getCurrentUser(),
+  ])
+
   if (!result.success || !result.data) {
     notFound()
   }
 
   const event = result.data
+  const isEventOwner = currentUser
+    ? isPlatformAdmin(currentUser) || event.ownerId === currentUser.id
+    : false
 
   return (
     <div>
@@ -45,14 +52,16 @@ export default async function EventPage({ params }: EventPageProps) {
             <p className="text-gray-600 mt-2">{event.description}</p>
           )}
         </div>
-        <div className="flex gap-2">
-          <Link href={`/events/${event.id}/tournaments/new`}>
-            <Button>Add Tournament</Button>
-          </Link>
-          <Link href={`/events/${event.id}/settings`}>
-            <Button variant="secondary">Settings</Button>
-          </Link>
-        </div>
+        {isEventOwner && (
+          <div className="flex gap-2">
+            <Link href={`/events/${event.id}/tournaments/new`}>
+              <Button>Add Tournament</Button>
+            </Link>
+            <Link href={`/events/${event.id}/settings`}>
+              <Button variant="secondary">Settings</Button>
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Tournaments */}
@@ -64,9 +73,11 @@ export default async function EventPage({ params }: EventPageProps) {
             <CardContent className="py-12 text-center">
               <h3 className="text-lg font-medium text-gray-900 mb-2">No tournaments yet</h3>
               <p className="text-gray-500 mb-4">Add tournaments to this event</p>
-              <Link href={`/events/${event.id}/tournaments/new`}>
-                <Button>Add Tournament</Button>
-              </Link>
+              {isEventOwner && (
+                <Link href={`/events/${event.id}/tournaments/new`}>
+                  <Button>Add Tournament</Button>
+                </Link>
+              )}
             </CardContent>
           </Card>
         ) : (

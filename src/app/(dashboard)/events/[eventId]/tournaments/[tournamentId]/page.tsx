@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getTournament } from '@/actions/tournament'
+import { getCurrentUser, isPlatformAdmin, canOrganizeTournament } from '@/lib/permissions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/badge'
@@ -13,13 +14,19 @@ interface TournamentPageProps {
 
 export default async function TournamentPage({ params }: TournamentPageProps) {
   const { eventId, tournamentId } = await params
-  const result = await getTournament(tournamentId)
-  
+  const [result, currentUser] = await Promise.all([
+    getTournament(tournamentId),
+    getCurrentUser(),
+  ])
+
   if (!result.success || !result.data) {
     notFound()
   }
 
   const tournament = result.data
+  const isOrganizer = currentUser
+    ? isPlatformAdmin(currentUser) || await canOrganizeTournament(currentUser, tournamentId)
+    : false
 
   return (
     <div>
@@ -50,12 +57,16 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
           <Link href={`/events/${eventId}/tournaments/${tournamentId}/schedule`}>
             <Button variant="secondary">Schedule</Button>
           </Link>
-          <Link href={`/events/${eventId}/tournaments/${tournamentId}/configure`}>
-            <Button variant="secondary">Configure</Button>
-          </Link>
-          <Link href={`/events/${eventId}/tournaments/${tournamentId}/edit`}>
-            <Button variant="secondary">Edit</Button>
-          </Link>
+          {isOrganizer && (
+            <>
+              <Link href={`/events/${eventId}/tournaments/${tournamentId}/configure`}>
+                <Button variant="secondary">Configure</Button>
+              </Link>
+              <Link href={`/events/${eventId}/tournaments/${tournamentId}/edit`}>
+                <Button variant="secondary">Edit</Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
 
@@ -105,18 +116,22 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>Teams ({tournament.teams.length})</CardTitle>
-              <Link href={`/events/${eventId}/tournaments/${tournamentId}/teams`}>
-                <Button variant="secondary" size="sm">Manage Teams</Button>
-              </Link>
+              {isOrganizer && (
+                <Link href={`/events/${eventId}/tournaments/${tournamentId}/teams`}>
+                  <Button variant="secondary" size="sm">Manage Teams</Button>
+                </Link>
+              )}
             </div>
           </CardHeader>
           <CardContent>
             {tournament.teams.length === 0 ? (
               <div className="text-center py-4">
                 <p className="text-gray-500 mb-2">No teams registered yet</p>
-                <Link href={`/events/${eventId}/tournaments/${tournamentId}/teams`}>
-                  <Button size="sm">Invite Teams</Button>
-                </Link>
+                {isOrganizer && (
+                  <Link href={`/events/${eventId}/tournaments/${tournamentId}/teams`}>
+                    <Button size="sm">Invite Teams</Button>
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="space-y-2">
@@ -149,9 +164,11 @@ export default async function TournamentPage({ params }: TournamentPageProps) {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>Stages</CardTitle>
-              <Link href={`/events/${eventId}/tournaments/${tournamentId}/configure`}>
-                <Button variant="secondary" size="sm">Configure</Button>
-              </Link>
+              {isOrganizer && (
+                <Link href={`/events/${eventId}/tournaments/${tournamentId}/configure`}>
+                  <Button variant="secondary" size="sm">Configure</Button>
+                </Link>
+              )}
             </div>
           </CardHeader>
           <CardContent>
